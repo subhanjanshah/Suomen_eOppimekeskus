@@ -1,0 +1,217 @@
+"""
+Streamlit UI for the Newsletter Draft Generator
+--------------------------------------------------
+Workflow:
+  1. Paste links OR type a topic per section (Events / Field Highlights)
+  2. Click "Generate Draft" -> AI downloads + summarises each item
+  3. REVIEW STEP: each item is shown individually with an Approve checkbox
+     and an editable summary box, so a human can correct/reject anything
+     before it goes out (matches the client's requirement: AI gathers,
+     human verifies, then it's sent)
+  4. Click "Build Final Newsletter" -> only approved (and possibly edited)
+     items are included in the final HTML draft
+
+Run locally (requires Ollama running: `ollama serve` in a separate terminal):
+    streamlit run streamlit_app.py
+"""
+
+import streamlit as st
+
+from newsletter_generator import (
+    build_newsletter_section,
+    build_newsletter_section_from_topic,
+    format_newsletter_html,
+    load_used_links,
+    clear_used_links,
+)
+
+
+def render_sidebar():
+    with st.sidebar:
+        st.subheader("Search memory")
+        used = load_used_links()
+        st.caption(
+            f"{len(used)} link(s) remembered as already used. "
+            "Search-by-topic will skip these automatically."
+        )
+        if used:
+            with st.expander("View remembered links"):
+                for u in sorted(used):
+                    st.write(u)
+        if st.button("Clear search memory"):
+            clear_used_links()
+            st.success("Cleared. Next search will not skip any links.")
+            st.rerun()
+
+
+def parse_links(raw_text):
+    if not raw_text:
+        return []
+    return [line.strip() for line in raw_text.splitlines() if line.strip()]
+
+
+def source_input(label, key_prefix):
+    """Renders the mode toggle (Paste links / Search by topic) and returns
+    a function that produces the section dict when called."""
+    mode = st.radio(
+        f"{label} - source",
+        ["Paste links", "Search by topic"],
+        key=f"{key_prefix}_mode",
+        horizontal=True,
+    )
+
+    if mode == "Paste links":
+        links_text = st.text_area(
+            f"{label} links (one per line)",
+            height=140,
+            key=f"{key_prefix}_links",
+            placeholder="https://example.com/some-article",
+        )
+
+        def build():
+            return build_newsletter_section(label, parse_links(links_text))
+
+        return build
+
+    else:
+        topic = st.text_input(
+            f"Topic to search for ({label})",
+            key=f"{key_prefix}_topic",
+            placeholder="e.g. digital pedagogy Finland",
+        )
+        num_results = st.slider(
+            "Number of results to fetch",
+            min_value=1, max_value=10, value=5,
+            key=f"{key_prefix}_num",
+        )
+
+        def build():
+            if not topic.strip():
+                return {"section_title": label, "entries": []}
+            return build_newsletter_section_from_topic(label, topic, max_results=num_results)
+
+        return build
+
+
+st.set_page_config(page_title="Newsletter Draft Generator", layout="wide")
+
+render_sidebar()
+
+st.title("Newsletter Draft Generator")
+st.markdown(
+    "Either paste links directly, or type a topic and let the AI search "
+    "the web for you. Every item must be reviewed and approved before it "
+    "goes into the final draft."
+)
+
+# Session state holds the generated (but not-yet-approved) sections across
+# button clicks, since Streamlit reruns the whole script on every interaction.
+if "generated_sections" not in st.session_state:
+    st.session_state.generated_sections = None
+
+newsletter_title = st.text_input(
+    "Newsletter title",
+    value="Suomen eOppimiskeskus Newsletter",
+)
+
+col1, col2 = st.columns(2)
+
+with col1:
+    st.subheader("Events")
+    events_builder = source_input("Events", "events")
+
+with col2:
+    st.subheader("Field Highlights")
+    highlights_builder = source_input("Field Highlights", "highlights")
+
+if st.button("Generate Draft", type="primary"):
+    with st.spinner("Searching, downloading, and summarising... this can take a minute or two."):
+        sections = [events_builder(), highlights_builder()]
+
+    # Tag each entry with a stable id + default approved=True, so checkboxes
+    # have something to key off across reruns.
+    for section in sections:
+        for i, entry in enumerate(section["entries"]):
+            entry["id"] = f"{section['section_title']}_{i}"
+            entry["approved"] = True
+
+    st.session_state.generated_sections = sections
+
+    total = sum(len(s["entries"]) for s in sections)
+    if total == 0:
+        st.error(
+            "No items were generated. Check your links/topic, and that "
+            "Ollama is running."
+        )
+
+# --- REVIEW STEP ---
+if st.session_state.generated_sections:
+    st.divider()
+    st.header("Review before sending")
+    st.markdown(
+        "Uncheck anything that shouldn't go out. Edit any summary directly "
+        "if it needs correcting."
+    )
+
+    for section in st.session_state.generated_sections:
+        if not section["entries"]:
+            continue
+
+        st.subheader(section["section_title"])
+
+        for entry in section["entries"]:
+            with st.container(border=True):
+                approve_col, content_col = st.columns([1, 8])
+
+                with approve_col:
+                    entry["approved"] = st.checkbox(
+                        "Include",
+                        value=entry["approved"],
+                        key=f"approve_{entry['id']}",
+                    )
+
+                with content_col:
+                    st.markdown(f"**{entry['title']}**")
+                    entry["summary"] = st.text_area(
+                        "Summary (editable)",
+                        value=entry["summary"],
+                        key=f"summary_{entry['id']}",
+                        height=90,
+                        label_visibility="collapsed",
+                    )
+                    st.caption(f"Source: {entry['source_url']}")
+
+    st.divider()
+
+    if st.button("Build Final Newsletter", type="primary"):
+        final_sections = []
+        for section in st.session_state.generated_sections:
+            approved_entries = [e for e in section["entries"] if e["approved"]]
+            final_sections.append({
+                "section_title": section["section_title"],
+                "entries": approved_entries,
+            })
+
+        total_approved = sum(len(s["entries"]) for s in final_sections)
+
+        if total_approved == 0:
+            st.error("No items are approved. Check at least one item above.")
+        else:
+            html = format_newsletter_html(
+                final_sections, newsletter_title=newsletter_title or "Newsletter"
+            )
+
+            with open("newsletter_draft.html", "w") as f:
+                f.write(html)
+
+            st.success(f"Final newsletter built with {total_approved} approved item(s).")
+
+            st.subheader("Final Preview")
+            st.components.v1.html(html, height=700, scrolling=True)
+
+            st.download_button(
+                label="Download final newsletter (HTML)",
+                data=html,
+                file_name="newsletter_draft.html",
+                mime="text/html",
+            )
