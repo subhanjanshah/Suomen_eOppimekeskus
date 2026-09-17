@@ -46,23 +46,54 @@ BLOCKED_DOMAINS = {
 
 # Domains/suffixes that get priority when present in search results -
 # EU institutions, research bodies, and established European sources.
-# This is a starting list; extend it with sources Kaisa's team already
-# trusts (e.g. specific Finnish education sites).
 PREFERRED_DOMAIN_HINTS = [
-    ".europa.eu",       # any EU institution site
-    "cordis.europa.eu", # EU research & innovation results
-    "eurydice",         # EU education information network
-    "oecd.org",         # education research, EU-adjacent
-    "elearningeuropa.info",
-    ".ac.uk",           # UK universities
-    ".edu",             # universities generally
-    ".fi",              # Finnish sites (client is Finland-based)
-    ".de", ".fr", ".nl", ".se", ".dk", ".no",  # other EU/Nordic domains
+    ".europa.eu", "cordis.europa.eu", "eurydice", "oecd.org",
+    "elearningeuropa.info", ".ac.uk", ".edu",
+    ".fi", ".de", ".fr", ".nl", ".se", ".dk", ".no",
 ]
+
+# The client's own curated list of trusted sources they currently check
+# manually (from sources.xlsx, provided directly by the client).
+# name -> domain, used to populate a pick-list in the UI so the team can
+# select sources instead of typing domains from memory.
+CLIENT_TRUSTED_SOURCES = {
+    "YLE (Finnish national broadcaster)": "yle.fi",
+    "OPH - Finnish National Agency for Education": "oph.fi",
+    "Ministry of Education and Culture (Finland)": "minedu.fi",
+    "Ministry of Economic Affairs (Finland)": "tem.fi",
+    "Theseus - AMK thesis repository": "theseus.fi",
+    "Aalto University - News": "aalto.fi",
+    "LUT University - News": "lut.fi",
+    "HAMK Unlimited Journal": "unlimited.hamk.fi",
+    "Aikuiskasvatus (adult education journal)": "aikuiskasvatus.fi",
+    "Sitra (Finnish Innovation Fund)": "sitra.fi",
+    "Karvi (Finnish Education Evaluation Centre)": "karvi.fi",
+    "Association of Finnish Municipalities": "kuntaliitto.fi",
+    "Finnish Institute of Occupational Health": "ttl.fi",
+    "AOE - Finnish Open Educational Resources": "aoe.fi",
+    "UNESCO Institute for Lifelong Learning": "uil.unesco.org",
+    "UNICEF Education": "unicef.org",
+    "Kopiosto (Finnish copyright org news)": "kopiosto.fi",
+    "EDEN - European Distance & E-Learning Network": "eden-europe.eu",
+    "ICDE - International Council for Open & Distance Education": "icde.org",
+    "ALT - UK Association for Learning Technology": "alt.ac.uk",
+    "Fleksibel Utdanning Norge (Norwegian, needs translation)": "fleksibelutdanning.no",
+    "Gartner - Learning & Development": "gartner.com",
+}
 
 # File used to remember which URLs have already been used, so repeat
 # searches for the same topic don't keep surfacing the same old article.
 USED_LINKS_FILE = Path("used_links.json")
+
+
+def ensure_scheme(url):
+    """Add https:// to a URL if the person typed it without one
+    (e.g. 'yle.fi' -> 'https://yle.fi'). Without this, requests/newspaper3k
+    fail with a confusing 'no connection adapters' error."""
+    url = url.strip()
+    if url and not url.startswith(("http://", "https://")):
+        url = f"https://{url}"
+    return url
 
 
 def _get_domain(url):
@@ -108,12 +139,23 @@ def clear_used_links():
 # - "in your own words" -> avoids copying source text directly (copyright)
 # - "only use facts explicitly stated" -> reduces hallucination risk
 # - short length -> keeps it a newsletter blurb, not a reproduction
+# - explicit "in English" -> keeps the base summary language consistent
+#   regardless of source article language, so translation to Finnish
+#   (for the bilingual toggle) always translates FROM a known language.
 SUMMARY_INSTRUCTION = (
-    "Summarise this in 2-3 sentences, in your own words, suitable for a "
-    "newsletter blurb. Only use facts explicitly stated in the article "
-    "above. Do not invent names, numbers, or details that are not in "
-    "the text. Do not copy sentences directly from the article - "
-    "rewrite in your own words."
+    "Summarise this in 2-3 sentences, in English, in your own words, "
+    "suitable for a newsletter blurb. Only use facts explicitly stated "
+    "in the article above. Do not invent names, numbers, or details "
+    "that are not in the text. Do not copy sentences directly from the "
+    "article - rewrite in your own words."
+)
+
+TRANSLATE_INSTRUCTION = (
+    "Translate the following newsletter title and summary into Finnish. "
+    "Keep the meaning accurate and the tone natural for a newsletter. "
+    "Respond in exactly this format, with nothing else before or after:\n"
+    "TITLE_FI: <translated title>\n"
+    "SUMMARY_FI: <translated summary>"
 )
 
 
@@ -123,6 +165,57 @@ def get_article_text(url):
     article.download()
     article.parse()
     return article.title, article.text
+
+
+def looks_like_homepage_or_section(url):
+    """Heuristic: a URL with no real path (e.g. https://yle.fi or
+    https://yle.fi/) is almost certainly a homepage/listing page,
+    not a single article."""
+    path = urlparse(url).path.strip("/")
+    return path == ""
+
+
+def discover_articles_from_source(homepage_url, limit=5):
+    """
+    Given a site's homepage/section URL (e.g. https://yle.fi), scan it for
+    links to individual articles, using newspaper3k's built-in site-crawling
+    (newspaper.build). Returns a list of article URLs found on that page.
+    """
+    from newspaper import build as build_source
+
+    print(f"  {homepage_url} looks like a homepage - scanning for articles...")
+    try:
+        source = build_source(homepage_url, memoize_articles=False)
+        urls = [a.url for a in source.articles]
+        print(f"  Found {len(urls)} article links on the page.")
+        return urls[:limit]
+    except Exception as e:
+        print(f"  Could not scan {homepage_url} for articles: {e}")
+        return []
+
+
+def expand_homepage_links(links, limit_per_site=5, avoid_repeats=True):
+    """
+    Given a mixed list of links, expand any homepage/section URLs into the
+    individual article URLs found on them, so the client can paste a site
+    like https://yle.fi directly instead of hunting for one specific
+    article link themselves. Also applies the same blocklist + duplicate
+    filtering used in topic search, for consistency.
+    """
+    used_links = load_used_links() if avoid_repeats else set()
+    expanded = []
+
+    for link in links:
+        if looks_like_homepage_or_section(link):
+            discovered = discover_articles_from_source(link, limit=limit_per_site)
+            for url in discovered:
+                if is_blocked_domain(url) or url in used_links:
+                    continue
+                expanded.append(url)
+        else:
+            expanded.append(link)
+
+    return expanded
 
 
 def summarise_with_qwen(title, text):
@@ -146,10 +239,51 @@ def summarise_with_qwen(title, text):
     return response.json()["message"]["content"].strip()
 
 
-def search_topic_for_links(topic, max_results=5, avoid_repeats=True):
+def translate_to_finnish(title_en, summary_en):
+    """
+    Translate an English title + summary into Finnish, for the bilingual
+    newsletter toggle. Returns (title_fi, summary_fi). Falls back to the
+    English versions if translation fails or the response can't be parsed,
+    so the newsletter still works even if this step has an issue.
+    """
+    prompt = f"Title: {title_en}\n\nSummary: {summary_en}\n\n{TRANSLATE_INSTRUCTION}"
+
+    try:
+        response = requests.post(
+            OLLAMA_URL,
+            json={
+                "model": MODEL,
+                "messages": [{"role": "user", "content": prompt}],
+                "stream": False,
+            },
+            timeout=120,
+        )
+        response.raise_for_status()
+        raw = response.json()["message"]["content"].strip()
+
+        title_fi, summary_fi = title_en, summary_en
+        for line in raw.splitlines():
+            if line.strip().startswith("TITLE_FI:"):
+                title_fi = line.split(":", 1)[1].strip()
+            elif line.strip().startswith("SUMMARY_FI:"):
+                summary_fi = line.split(":", 1)[1].strip()
+
+        return title_fi, summary_fi
+
+    except Exception as e:
+        print(f"  Translation to Finnish failed, using English as fallback: {e}")
+        return title_en, summary_en
+
+
+def search_topic_for_links(topic, max_results=5, avoid_repeats=True, restrict_to_site=None):
     """
     Search the web for a topic and return a list of candidate URLs.
     Uses DuckDuckGo via the free `ddgs` library - no API key, no cost.
+
+    Args:
+        restrict_to_site: optional domain (e.g. "theseus.fi") to limit
+            results to just that site - useful for trusted repositories
+            you want to monitor specifically, rather than the open web.
 
     Applies three filters:
       1. Removes blocked/low-reliability domains (e.g. Wikipedia)
@@ -160,13 +294,14 @@ def search_topic_for_links(topic, max_results=5, avoid_repeats=True):
     each one still uses get_article_text() and summarise_with_qwen() below,
     same as the manual-link workflow.
     """
-    print(f"Searching the web for: {topic}")
+    query = f"site:{restrict_to_site} {topic}" if restrict_to_site else topic
+    print(f"Searching the web for: {query}")
 
     # Fetch extra results up front since some will get filtered out below.
     fetch_count = max_results * 4
 
     try:
-        results = DDGS().text(topic, max_results=fetch_count)
+        results = DDGS().text(query, max_results=fetch_count)
     except Exception as e:
         print(f"  Search failed: {e}")
         return []
@@ -198,13 +333,52 @@ def search_topic_for_links(topic, max_results=5, avoid_repeats=True):
     return final_urls
 
 
-def build_newsletter_section_from_topic(section_title, topic, max_results=5):
+def search_multiple_sites_for_links(topic, sites, max_results_total=5, avoid_repeats=True):
+    """
+    Search for a topic across several specific trusted sites at once
+    (e.g. the client's curated source list), combining and deduplicating
+    results. Each site already-used-link filtering applies per site, then
+    results are combined and trimmed to max_results_total overall.
+
+    Args:
+        sites: list of domains, e.g. ["theseus.fi", "oph.fi"]
+    """
+    if not sites:
+        return search_topic_for_links(topic, max_results=max_results_total, avoid_repeats=avoid_repeats)
+
+    # Split the total budget roughly evenly across the selected sites.
+    per_site = max(1, -(-max_results_total // len(sites)))  # ceil division
+
+    combined = []
+    seen = set()
+    for site in sites:
+        site_links = search_topic_for_links(
+            topic, max_results=per_site, avoid_repeats=avoid_repeats, restrict_to_site=site
+        )
+        for url in site_links:
+            if url not in seen:
+                combined.append(url)
+                seen.add(url)
+
+    return combined[:max_results_total]
+
+
+def build_newsletter_section_from_topic(section_title, topic, max_results=5,
+                                         restrict_to_site=None, sites=None):
     """Search for a topic, then build a newsletter section from the results
-    (combines discovery + summarisation in one step)."""
-    links = search_topic_for_links(topic, max_results=max_results)
+    (combines discovery + summarisation in one step).
+
+    Provide either `restrict_to_site` (a single domain) or `sites`
+    (a list of domains to search across, e.g. the client's trusted list).
+    """
+    if sites:
+        links = search_multiple_sites_for_links(topic, sites, max_results_total=max_results)
+    else:
+        links = search_topic_for_links(topic, max_results=max_results, restrict_to_site=restrict_to_site)
 
     # Remember these links immediately, so re-running the same topic later
-    # (e.g. next week) surfaces fresh results instead of the same ones.
+    # (e.g. next newsletter cycle) surfaces fresh results instead of the
+    # same ones - even though the same websites get checked every time.
     if links:
         mark_links_as_used(links)
 
@@ -212,8 +386,20 @@ def build_newsletter_section_from_topic(section_title, topic, max_results=5):
 
 
 def build_newsletter_section(section_title, links):
-    """Process a list of links into one newsletter section (e.g. 'Events')."""
+    """Process a list of links into one newsletter section (e.g. 'Events').
+
+    Any link that looks like a homepage/section page (e.g. https://yle.fi)
+    is automatically expanded into the individual article links found on
+    that page - so pasting a site's homepage works, not just direct
+    article URLs.
+    """
     print(f"\n--- Processing section: {section_title} ---")
+
+    links = [ensure_scheme(link) for link in links if link.strip()]
+    links = expand_homepage_links(links)
+    if links:
+        mark_links_as_used(links)
+
     entries = []
 
     for url in links:

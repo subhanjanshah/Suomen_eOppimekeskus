@@ -23,6 +23,7 @@ from newsletter_generator import (
     format_newsletter_html,
     load_used_links,
     clear_used_links,
+    CLIENT_TRUSTED_SOURCES,
 )
 
 
@@ -79,6 +80,22 @@ def source_input(label, key_prefix):
             key=f"{key_prefix}_topic",
             placeholder="e.g. digital pedagogy Finland",
         )
+
+        source_names = st.multiselect(
+            "Check these trusted sources (leave empty to search the whole web)",
+            options=list(CLIENT_TRUSTED_SOURCES.keys()),
+            key=f"{key_prefix}_sources",
+            help="These are the sources the team already uses. Selecting "
+                 "one or more restricts the search to just those sites - "
+                 "the same sites can be checked every newsletter cycle "
+                 "without repeating articles already used before.",
+        )
+        custom_domain = st.text_input(
+            "Or a custom domain (optional)",
+            key=f"{key_prefix}_custom_site",
+            placeholder="e.g. some-other-trusted-site.fi",
+        )
+
         num_results = st.slider(
             "Number of results to fetch",
             min_value=1, max_value=10, value=5,
@@ -88,7 +105,15 @@ def source_input(label, key_prefix):
         def build():
             if not topic.strip():
                 return {"section_title": label, "entries": []}
-            return build_newsletter_section_from_topic(label, topic, max_results=num_results)
+
+            sites = [CLIENT_TRUSTED_SOURCES[name] for name in source_names]
+            if custom_domain.strip():
+                sites.append(custom_domain.strip())
+
+            return build_newsletter_section_from_topic(
+                label, topic, max_results=num_results,
+                sites=sites or None,
+            )
 
         return build
 
@@ -140,8 +165,14 @@ if st.button("Generate Draft", type="primary"):
     total = sum(len(s["entries"]) for s in sections)
     if total == 0:
         st.error(
-            "No items were generated. Check your links/topic, and that "
-            "Ollama is running."
+            "No items were generated. This can happen if: Ollama isn't "
+            "running, the links/topic were empty, or - if you pasted a "
+            "site homepage - the site's article links couldn't be found "
+            "automatically (common on modern, JavaScript-heavy sites). "
+            "If a homepage link didn't work, try 'Search by topic' with "
+            "that site selected as a trusted source instead - it uses "
+            "search-engine indexing, which handles these sites better "
+            "than scanning the page's raw HTML."
         )
 
 # --- REVIEW STEP ---
