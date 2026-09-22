@@ -23,6 +23,7 @@ from newsletter_generator import (
     format_newsletter_html,
     load_used_links,
     clear_used_links,
+    translate_to_finnish,
     CLIENT_TRUSTED_SOURCES,
 )
 
@@ -228,6 +229,18 @@ if st.session_state.generated_sections:
         if total_approved == 0:
             st.error("No items are approved. Check at least one item above.")
         else:
+            with st.spinner("Translating approved items to Finnish for the language toggle..."):
+                for section in final_sections:
+                    for entry in section["entries"]:
+                        # Translate the final (possibly human-edited) English
+                        # text, so the Finnish version matches any corrections
+                        # made during review.
+                        title_fi, summary_fi = translate_to_finnish(
+                            entry["title"], entry["summary"]
+                        )
+                        entry["title_fi"] = title_fi
+                        entry["summary_fi"] = summary_fi
+
             html = format_newsletter_html(
                 final_sections, newsletter_title=newsletter_title or "Newsletter"
             )

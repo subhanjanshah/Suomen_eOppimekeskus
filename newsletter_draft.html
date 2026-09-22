@@ -20,13 +20,41 @@
     background: #FBFAF7;
     padding: 48px 44px;
     border: 1px solid #DCD7CA;
+    position: relative;
   }
+
+  .lang-toggle {
+    position: absolute;
+    top: 24px;
+    right: 24px;
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    background: #FBFAF7;
+    color: #2F6F62;
+    border: 1px solid #2F6F62;
+    border-radius: 999px;
+    padding: 6px 14px;
+    cursor: pointer;
+  }
+
+  .lang-toggle:hover {
+    background: #2F6F62;
+    color: #FBFAF7;
+  }
+
+  /* Language visibility: English shows by default, Finnish hidden,
+     JS below flips a class on <body> to swap them. */
+  .lang-fi { display: none; }
+  body.show-fi .lang-en { display: none; }
+  body.show-fi .lang-fi { display: inline; }
 
   .masthead {
     text-align: left;
     border-bottom: 2px solid #2F6F62;
     padding-bottom: 20px;
     margin-bottom: 36px;
+    padding-right: 90px; /* keep title clear of the toggle button */
   }
 
   .masthead h1 {
@@ -108,47 +136,183 @@
 </head>
 <body>
   <div class="newsletter">
+    <button class="lang-toggle" onclick="toggleLanguage()" id="langToggleBtn">FI</button>
+
     <div class="masthead">
       <h1>Suomen eOppimiskeskus Newsletter</h1>
-      <div class="note">AI-assisted draft &mdash; please review before sending</div>
+      <div class="note">
+        <span class="lang-en">AI-assisted draft &mdash; please review before sending</span>
+        <span class="lang-fi">Teko&auml;lyavusteinen luonnos &mdash; tarkista ennen l&auml;hett&auml;mist&auml;</span>
+      </div>
     </div>
     
       <section>
-        <div class="section-label">Events</div>
-        <p class="empty">No items in this section yet.</p>
+        <div class="section-label">
+          <span class="lang-en">Events</span>
+          <span class="lang-fi">Tapahtumat</span>
+        </div>
+        <p class="empty"><span class="lang-en">No items in this section yet.</span><span class="lang-fi">Ei kohteita t&auml;ss&auml; osiossa viel&auml;.</span></p>
       </section>
       <section>
-        <div class="section-label">Field Highlights</div>
+        <div class="section-label">
+          <span class="lang-en">Field Highlights</span>
+          <span class="lang-fi">Alan kohokohdat</span>
+        </div>
         
         <div class="entry">
-          <h3>Uusi Yle Kielikoulu -palvelu auttaa oppimaan suomea ja ruotsia</h3>
-          <p>This year's autumn matriculation exams in Finland, which have been conducted digitally since 2016, are seeing a record number of 47,800 candidates, with 99,700 registrations across subjects, the highest ever. Ahead of the exams, a student discovered a method to use artificial intelligence for cheating, highlighting ongoing concerns about security vulnerabilities in the digital exam system.</p>
-          <a class="read-more" href="https://yle.fi/a/20-304680" target="_blank">Read the full source &rarr;</a>
+          <h3>
+            <span class="lang-en">UNI eLearning Suite</span>
+            <span class="lang-fi">UNI-oppimiskoekalustoa</span>
+          </h3>
+          <p>
+            <span class="lang-en">UNI eLearning Suite encompasses a range of instructional technology tools such as Blackboard, Panopto, Poll Everywhere, Zoom, LinkedIn Learning, Ally, and Google Suite, all of which are centrally supported by UNI. This suite includes a Learning Management System (LMS) and more, catering to diverse educational needs.</span>
+            <span class="lang-fi">UNI-oppimiskoekalustoon kuuluu laji diverseja oppimiskaluksia, kuten Blackboard, Panopto, Poll Everywhere, Zoom, LinkedIn Learning, Ally ja Google Suite. Kaikki nämäkalut tuketaan yksityiskohtaisesti UNI:n toimesta. Koalustuksessa sisältyy oppimisyhdistelmäjärjestelmä (LMS) ja muita palveluja, jotka hoitavat erilaisia oppimisympäristötarpeita.</span>
+          </p>
+          <a class="read-more" href="https://it.uni.edu/elearning" target="_blank">
+            <span class="lang-en">Read the full source &rarr;</span>
+            <span class="lang-fi">Lue koko l&auml;hde &rarr;</span>
+          </a>
         </div>
         <div class="entry">
-          <h3>Opi suomea</h3>
-          <p>The Yle API can assess the similarity between words using cosine similarity, as demonstrated with the word2vec_fin dataset. Additionally, it can predict article labels, such as distinguishing between news and sports, even with single words, achieving an accuracy of 87% through a standard random forest classifier setup.</p>
-          <a class="read-more" href="https://yle.fi/oppiminen/opisuomea" target="_blank">Read the full source &rarr;</a>
+          <h3>
+            <span class="lang-en">Students’ Industrial Work Experience Scheme (SIWES)</span>
+            <span class="lang-fi">Työkokemuksen opiskelijoiden hallintoasemat (SIWES)</span>
+          </h3>
+          <p>
+            <span class="lang-en">The National Open University of Nigeria operates the SIWES Desk Officers at its study centers to ensure students have a smooth and rewarding industrial work experience. The university has introduced the SIWES Administration System to streamline the management of students' industrial attachments, including generating master and placement lists, and enhancing supervision and reporting.</span>
+            <span class="lang-fi">National Open University of Nigeria toimii opiskelijoiden työkokemuksen hallintoasemien kautta omista opiskelijakenttäkeskuksistaan, varmistaen, että opiskelijoiden työkokemuksia suoritetaan menestyksekkäästi ja nauttiaan. Yliopisto on tämänhetkisesti aloittanut SIWES-hallintajärjestelmän, joka on suunniteltu yksinkertaistamaan työkokemusten hallintaa, mukaan lukien luominen ja hallintoon ottaminen opiskelijakenttälistoja, sekä parantamaan valvontaa ja raportointia.</span>
+          </p>
+          <a class="read-more" href="https://nou.edu.ng/students-industrial-work-experience-scheme-siwes-2/" target="_blank">
+            <span class="lang-en">Read the full source &rarr;</span>
+            <span class="lang-fi">Lue koko l&auml;hde &rarr;</span>
+          </a>
         </div>
         <div class="entry">
-          <h3>Rocky linguistic road for immigrant nurses</h3>
-          <p>The Finnish YKI test, a crucial step for those seeking Finnish citizenship, assesses language skills at three levels and includes speaking, listening, writing, and reading parts. Yle has developed a B1-level learning pack focusing on practical topics relevant to everyday life, aimed at helping test takers prepare effectively.</p>
-          <a class="read-more" href="https://yle.fi/a/3-7130306" target="_blank">Read the full source &rarr;</a>
+          <h3>
+            <span class="lang-en">Directorate of Management Information System (DMIS)</span>
+            <span class="lang-fi">NOUNMIS-direktori (NATIONAL OPEN UNIVERSITY OF NIGERIA MANAGEMENT INFORMATION SYSTEM)</span>
+          </h3>
+          <p>
+            <span class="lang-en">NOUNMIS, the National Open University of Nigeria Management Information System Directorate, offers management staff and stakeholders accurate and timely information through various applications developed in-house, including systems for portal management, admission, and script submission, among others, thereby enhancing service delivery and reducing reliance on external consultants.</span>
+            <span class="lang-fi">NOUNMIS, Nijeriassa toimiva kansallinen avoin yliopiston (National Open University of Nigeria) hallintotietojärjestelmädirektori, tarjoaa hallintoon ja osapuolten tarkkaan ja ajoissa toiminnan varten omien kehittämien sovellusten kautta, kuten portaalihallintaooppera, inskriptio ja scriptin lähde, muiden myös, mikä parantaa palvelun toimintaa ja vähentää ulkoisten kirjastojen riitämisen tarpeen.</span>
+          </p>
+          <a class="read-more" href="https://nou.edu.ng/directorate-of-management-information-system-dmis/" target="_blank">
+            <span class="lang-en">Read the full source &rarr;</span>
+            <span class="lang-fi">Lue koko l&auml;hde &rarr;</span>
+          </a>
         </div>
         <div class="entry">
-          <h3>Is Finland to blame for the world's falling Pisa scores? Some think so</h3>
-          <p>This article outlines a comprehensive collection of materials for learning Finnish, offered by Yle. It includes basic alphabet and number lessons, phrases for everyday use, and various levels of YKI test preparation. Additionally, it features video courses on business Finnish, cultural immersion, and short videos about everyday life in Finland, suitable for different proficiency levels.</p>
-          <a class="read-more" href="https://yle.fi/a/74-20245640" target="_blank">Read the full source &rarr;</a>
+          <h3>
+            <span class="lang-en">DLCMS – Directorate of Learning Content Management System</span>
+            <span class="lang-fi">DLCMS - Osasto opettamateriaalin hallinnosta</span>
+          </h3>
+          <p>
+            <span class="lang-en">The Directorate of Learning Content Management System (DLCMS) at the National Open University of Nigeria is dedicated to enhancing digital learning through innovative e-learning solutions and collaborative efforts with experts in various fields. DLCMS aims to provide seamless access to quality education for NOUN students, regardless of their location, by developing engaging and accessible digital learning experiences.</span>
+            <span class="lang-fi">Nationaalin avoimen yliopiston (NAYO) osasto opettamateriaalin hallinnosta (DLCMS) edistää digitaalisen opetusta innovatiivisilla e-oppimistapauksilla ja yhteistyöllisillä toimintamalleilla eri alojen experttien kanssa. DLCMS pyrkii tarjoamaan kvaliteettista opetusta NAYO:n opiskelijoille, mistä heidän sijaintinsa riippumatta, kehittäen osallistuksellisia ja saatavilla olevia digitaalista oppimista tarjoavia kokemuksia.</span>
+          </p>
+          <a class="read-more" href="https://nou.edu.ng/directorate-of-learning-content-management-system/" target="_blank">
+            <span class="lang-en">Read the full source &rarr;</span>
+            <span class="lang-fi">Lue koko l&auml;hde &rarr;</span>
+          </a>
         </div>
         <div class="entry">
-          <h3>Yle’s units</h3>
-          <p>Yle is committed to promoting equality and non-discrimination, aiming to ensure gender balance and diverse representation across all job groups, with specific measures to address gendered job distributions. The organization also ensures equal treatment of all employees, regardless of personal characteristics, and aims to foster a supportive work environment that values and listens to its personnel.</p>
-          <a class="read-more" href="https://yle.fi/a/20-294267" target="_blank">Read the full source &rarr;</a>
+          <h3>
+            <span class="lang-en">Directorate of Physical Planning and Development</span>
+            <span class="lang-fi">Välitarkastusteknologia- ja kehitysaineet</span>
+          </h3>
+          <p>
+            <span class="lang-en">The Directorate of Physical Planning and Development oversees three main units: Project Conception and Planning, focusing on pre-contract activities; Project Monitoring and Evaluation, which ensures post-contract activities align with designs; and Property/Land Management, tasked with advising on issues related to properties or land.</span>
+            <span class="lang-fi">Välitarkastusteknologia- ja kehitysaineet valvovat kolme pääasialista osaamistahoa: Ohjelmien luominen ja suunnittelu, joka keskittyy ettei-ajatusten toiminnallisuuteen; Ohjelmien seuranta ja arviointi, joka varmistaa, että post-ajattelun toimintatapa soveltaa suunnitelmiin; ja Esiintymistä- ja maaperän hallinta, joka antaa tosiasioita perusteluista asioihin tai maaperään liittyvistä kysymyksistä.</span>
+          </p>
+          <a class="read-more" href="https://nou.edu.ng/directorate-of-physical-development-work-services/" target="_blank">
+            <span class="lang-en">Read the full source &rarr;</span>
+            <span class="lang-fi">Lue koko l&auml;hde &rarr;</span>
+          </a>
+        </div>
+        <div class="entry">
+          <h3>
+            <span class="lang-en">Directorate of Staff Training and Development</span>
+            <span class="lang-fi">Työnjärjestyskoti Harjoittelua ja kehitystausta</span>
+          </h3>
+          <p>
+            <span class="lang-en">The Directorate of Staff Training and Development at the University offers comprehensive training services to both academic and non-teaching staff. It ensures that staff are informed about the necessary procedures for training applications and conferences, with eligibility for conference sponsorship contingent on a confirmed appointment, typically after a two-year wait.</span>
+            <span class="lang-fi">Yliopiston Työnjärjestyskoti Harjoittelua ja kehitystausta tarjoo kattavia harjoittelupalveluita ammatilliseen ja opettajasta muodostuneeseen henkilökuntaan. Kohdellaan henkilökuntaan tarpeiden tiedotuksen tarpeisiin harjoittelihakemusten ja konferenssien osallistamisen suhteen, ja konferenssin rahoitusvilkoaminen sallitaan vain vahvistettuun työihin astuiin henkilökuntaan, tavallisesti jälkeen kahden vuoden odotuksen jälkeen.</span>
+          </p>
+          <a class="read-more" href="https://nou.edu.ng/directorate-of-staff-training-and-development/" target="_blank">
+            <span class="lang-en">Read the full source &rarr;</span>
+            <span class="lang-fi">Lue koko l&auml;hde &rarr;</span>
+          </a>
+        </div>
+        <div class="entry">
+          <h3>
+            <span class="lang-en">Study: Why Colder Temps Can Be Better for Removing Ice</span>
+            <span class="lang-fi">Johto: Säännölliset lämpenot voivat olla parempia jalanpoistoaineiden poistamisessa kylmempisissä ilmastoissa</span>
+          </h3>
+          <p>
+            <span class="lang-en">Researchers at UT Dallas discovered that colder temperatures can be more effective for removing ice from surfaces than traditional heating methods, especially in extremely cold environments. By cooling ice rapidly on surfaces with high thermal conductivity, such as metal, ice can be made to contract and fracture, reducing its adhesion and making it easier to detach.</span>
+            <span class="lang-fi">Tutkijat Helsingin yliopistosta havaittivat, että lämpenömenettelyt eivät aina ole tehokkaimmat jalanpoistoaineiden poistamiseksi. Kylmämpiä ilmastoja voidaan käyttää tehokkaammin, erityisesti kylmän ilman olosuhteissa. Nopea kylmennös paholla kantoa sillä kappaleilla, kuten metallilla, saattaa jalanpoistoaineet rajoittua ja rikkoutua, mikä vähentää niiden kiintyiä ja antaa heidän helpommin puhdistumisen.</span>
+          </p>
+          <a class="read-more" href="https://news.utdallas.edu/science-technology/colder-can-be-better-deicing-2026/" target="_blank">
+            <span class="lang-en">Read the full source &rarr;</span>
+            <span class="lang-fi">Lue koko l&auml;hde &rarr;</span>
+          </a>
+        </div>
+        <div class="entry">
+          <h3>
+            <span class="lang-en">Researcher Explores Estrogen’s Role in Delaying Psychosis</span>
+            <span class="lang-fi">Tutkijan tutkimus esittää estrojen aikovaisuuden psykosen alkuvaiheen viivästyttämisessä</span>
+          </h3>
+          <p>
+            <span class="lang-en">Dr. Katherine Damme, an assistant professor at the University of Texas at Dallas, is researching how estrogen might delay the onset of psychotic disorders, which typically affect men earlier than women. By analyzing data from the NIH's Adolescent Brain Cognitive Development Study, her work aims to understand the protective role of estrogen on brain development and potentially lead to improved treatments for men at risk of psychosis.</span>
+            <span class="lang-fi">Dr. Katherine Damme, Uutalaisen yliopistossa toimivaa assistanttipehkinä, tutkii, miten estroeni saattaa viivästyttää psyykosyritysten alkamista, joka tavallisesti vaikuttaa miesten entuudestaan naisiin. Analysoiävät hän hankkeen NIH:n Nuorten kehityskäsvisuuden ja epäilykäsvarusten kehityksestä, hänelin tutkimuksensa ymmärtämään estroedin suojavaiheen kehitykseen ja todennäköisesti parantamaan hoitoa miesten hyväksi, jotka ovat vaarassa psykosen kehittymisestä.</span>
+          </p>
+          <a class="read-more" href="https://news.utdallas.edu/health-medicine/estrogens-role-in-delaying-psychosis-2026/" target="_blank">
+            <span class="lang-en">Read the full source &rarr;</span>
+            <span class="lang-fi">Lue koko l&auml;hde &rarr;</span>
+          </a>
+        </div>
+        <div class="entry">
+          <h3>
+            <span class="lang-en">OIT & AWS Skills Center | Spring 2026</span>
+            <span class="lang-fi">OIT & AWS Skills Center | Keväksi 2026</span>
+          </h3>
+          <p>
+            <span class="lang-en">UTD is partnering with AWS for the Spring 2026 semester to offer free virtual learning paths to become an AWS Cloud Practitioner and an AWS AI Practitioner. Participants can join one or both cohorts and learn directly from AWS professionals, with recommended study materials provided, and a chance to win a voucher for the AWS Foundational Certification.</span>
+            <span class="lang-fi">UTD yhteistyössä AWS on Suomea tarjonneen vapaan virtuaalisen oppiainenkeskusten kevään 2026 aikana AWS Cloud Practitioner ja AWS AI Practitioner oppimistaikeisiin. Osallistujia voi liittää yhden tai molemmilla työryhmillä, ja he opettavat AWS:n ammattilaisten. Suositut opintomateriaalit ja tilausvapaa AWS:n peruskoulutusyleman saannista mahdollistetaan.</span>
+          </p>
+          <a class="read-more" href="https://oit.utdallas.edu/news/oit-aws-skills-center-spring-2026/" target="_blank">
+            <span class="lang-en">Read the full source &rarr;</span>
+            <span class="lang-fi">Lue koko l&auml;hde &rarr;</span>
+          </a>
+        </div>
+        <div class="entry">
+          <h3>
+            <span class="lang-en">Welcome to Comet AI</span>
+            <span class="lang-fi">Tervetuloa Comet AI:hin</span>
+          </h3>
+          <p>
+            <span class="lang-en">UT Dallas has introduced CometAI, a secure, campus-specific AI platform that allows faculty and staff to access and customize 15 advanced AI models for various tasks such as generating professional documents and creating AI assistants. This tool supports innovation by providing a flexible and customizable environment for research, teaching, and project management.</span>
+            <span class="lang-fi">UT Dallas on esittänyt CometAI:n, turvallisen ytimekukeskustapaustasollisen Intelliagenttiruutujärjestelmän, joka mahdollistaa opettajien ja tyontekijöiden käyttöä ja custoomisointia 15 eri tehtäviä kattavia Intelliagenttiruutujärjestelmiä, kuten ammattiyhdistysdokumenttien luomista ja AI-apulaisvuorropaikkoja luomista. Tämä työkalu edistää innovaatiota tarjoamalla flexiibeli ja custoomisointivarmennettu ympäristö tutkimukselle, opetukseen ja projektipalvelulle.</span>
+          </p>
+          <a class="read-more" href="https://oit.utdallas.edu/news/welcome-to-comet-ai/" target="_blank">
+            <span class="lang-en">Read the full source &rarr;</span>
+            <span class="lang-fi">Lue koko l&auml;hde &rarr;</span>
+          </a>
         </div>
       </section>
     <div class="footer-note">
-      Summaries generated locally with qwen2.5:7b via Ollama. Each item links back to its original source.
+      <span class="lang-en">Summaries generated locally with qwen2.5:7b via Ollama. Each item links back to its original source.</span>
+      <span class="lang-fi">Yhteenvedot luotu paikallisesti qwen2.5:7b-mallilla Ollaman kautta. Jokainen kohta linkitt&auml;&auml; alkuper&auml;iseen l&auml;hteeseen.</span>
     </div>
   </div>
+
+  <script>
+    function toggleLanguage() {
+      const body = document.body;
+      const btn = document.getElementById('langToggleBtn');
+      body.classList.toggle('show-fi');
+      btn.textContent = body.classList.contains('show-fi') ? 'EN' : 'FI';
+    }
+  </script>
 </body>
 </html>

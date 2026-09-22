@@ -158,6 +158,14 @@ TRANSLATE_INSTRUCTION = (
     "SUMMARY_FI: <translated summary>"
 )
 
+# Static translations for the section labels used in the app (Events /
+# Field Highlights). If your team adds new section names, add their
+# Finnish equivalent here too - otherwise the English name is reused.
+SECTION_TITLE_FI = {
+    "Events": "Tapahtumat",
+    "Field Highlights": "Alan kohokohdat",
+}
+
 
 def get_article_text(url):
     """Download and extract the readable text of an article from a URL."""
@@ -446,24 +454,53 @@ def format_newsletter_markdown(sections):
 
 
 def format_newsletter_html(sections, newsletter_title="Association Newsletter"):
-    """Turn the processed sections into a styled HTML newsletter, viewable in any browser."""
+    """
+    Turn the processed sections into a styled, bilingual HTML newsletter.
+
+    Each entry may have English fields (title, summary) and, optionally,
+    Finnish fields (title_fi, summary_fi) added by translate_to_finnish().
+    Both versions are embedded in the same page; a toggle button (top
+    right) switches which one is visible via CSS, no page reload needed.
+    If Finnish fields are missing on an entry, the English text is used
+    for both, so the toggle never shows something blank.
+    """
 
     def entry_html(entry):
+        title_fi = entry.get("title_fi") or entry["title"]
+        summary_fi = entry.get("summary_fi") or entry["summary"]
         return f"""
         <div class="entry">
-          <h3>{entry['title']}</h3>
-          <p>{entry['summary']}</p>
-          <a class="read-more" href="{entry['source_url']}" target="_blank">Read the full source &rarr;</a>
+          <h3>
+            <span class="lang-en">{entry['title']}</span>
+            <span class="lang-fi">{title_fi}</span>
+          </h3>
+          <p>
+            <span class="lang-en">{entry['summary']}</span>
+            <span class="lang-fi">{summary_fi}</span>
+          </p>
+          <a class="read-more" href="{entry['source_url']}" target="_blank">
+            <span class="lang-en">Read the full source &rarr;</span>
+            <span class="lang-fi">Lue koko l&auml;hde &rarr;</span>
+          </a>
         </div>"""
 
     def section_html(section):
+        title_fi = SECTION_TITLE_FI.get(section["section_title"], section["section_title"])
         if not section["entries"]:
-            body = '<p class="empty">No items in this section yet.</p>'
+            body = (
+                '<p class="empty">'
+                '<span class="lang-en">No items in this section yet.</span>'
+                '<span class="lang-fi">Ei kohteita t&auml;ss&auml; osiossa viel&auml;.</span>'
+                '</p>'
+            )
         else:
             body = "".join(entry_html(e) for e in section["entries"])
         return f"""
       <section>
-        <div class="section-label">{section['section_title']}</div>
+        <div class="section-label">
+          <span class="lang-en">{section['section_title']}</span>
+          <span class="lang-fi">{title_fi}</span>
+        </div>
         {body}
       </section>"""
 
@@ -491,13 +528,41 @@ def format_newsletter_html(sections, newsletter_title="Association Newsletter"):
     background: #FBFAF7;
     padding: 48px 44px;
     border: 1px solid #DCD7CA;
+    position: relative;
   }}
+
+  .lang-toggle {{
+    position: absolute;
+    top: 24px;
+    right: 24px;
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    background: #FBFAF7;
+    color: #2F6F62;
+    border: 1px solid #2F6F62;
+    border-radius: 999px;
+    padding: 6px 14px;
+    cursor: pointer;
+  }}
+
+  .lang-toggle:hover {{
+    background: #2F6F62;
+    color: #FBFAF7;
+  }}
+
+  /* Language visibility: English shows by default, Finnish hidden,
+     JS below flips a class on <body> to swap them. */
+  .lang-fi {{ display: none; }}
+  body.show-fi .lang-en {{ display: none; }}
+  body.show-fi .lang-fi {{ display: inline; }}
 
   .masthead {{
     text-align: left;
     border-bottom: 2px solid #2F6F62;
     padding-bottom: 20px;
     margin-bottom: 36px;
+    padding-right: 90px; /* keep title clear of the toggle button */
   }}
 
   .masthead h1 {{
@@ -579,15 +644,30 @@ def format_newsletter_html(sections, newsletter_title="Association Newsletter"):
 </head>
 <body>
   <div class="newsletter">
+    <button class="lang-toggle" onclick="toggleLanguage()" id="langToggleBtn">FI</button>
+
     <div class="masthead">
       <h1>{newsletter_title}</h1>
-      <div class="note">AI-assisted draft &mdash; please review before sending</div>
+      <div class="note">
+        <span class="lang-en">AI-assisted draft &mdash; please review before sending</span>
+        <span class="lang-fi">Teko&auml;lyavusteinen luonnos &mdash; tarkista ennen l&auml;hett&auml;mist&auml;</span>
+      </div>
     </div>
     {sections_markup}
     <div class="footer-note">
-      Summaries generated locally with qwen2.5:7b via Ollama. Each item links back to its original source.
+      <span class="lang-en">Summaries generated locally with qwen2.5:7b via Ollama. Each item links back to its original source.</span>
+      <span class="lang-fi">Yhteenvedot luotu paikallisesti qwen2.5:7b-mallilla Ollaman kautta. Jokainen kohta linkitt&auml;&auml; alkuper&auml;iseen l&auml;hteeseen.</span>
     </div>
   </div>
+
+  <script>
+    function toggleLanguage() {{
+      const body = document.body;
+      const btn = document.getElementById('langToggleBtn');
+      body.classList.toggle('show-fi');
+      btn.textContent = body.classList.contains('show-fi') ? 'EN' : 'FI';
+    }}
+  </script>
 </body>
 </html>"""
 
