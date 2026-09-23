@@ -15,19 +15,17 @@ Run locally (requires Ollama running: `ollama serve` in a separate terminal):
 """
 
 import json
-import os
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlparsewe
 
 import requests
 from newspaper import Article
 from ddgs import DDGS
 
 
-OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
-OLLAMA_CHAT_URL = f"{OLLAMA_BASE_URL}/api/chat"
-OLLAMA_GENERATE_URL = f"{OLLAMA_BASE_URL}/api/generate"
-MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5:7b")
+OLLAMA_CHAT_URL = "http://localhost:11434/api/chat"
+OLLAMA_GENERATE_URL = "http://localhost:11434/api/generate"
+MODEL = "qwen2.5:7b"
 
 # Kept for compatibility with earlier code that imports OLLAMA_URL directly.
 OLLAMA_URL = OLLAMA_CHAT_URL
