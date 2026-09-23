@@ -98,9 +98,16 @@ The app opens at `http://localhost:8501`.
 
 1. Choose **Paste links** or **Search by topic** for each newsletter section
 2. Click **Generate Draft** — the AI downloads, filters, and summarises each source
-3. **Review** each item: uncheck anything irrelevant, edit any summary that needs correcting
-4. Click **Build Final Newsletter** to produce the final styled HTML draft
-5. Download and hand off for sending (e.g. via Mailchimp)
+3. **Review** each item: edit its English summary and explicitly check **Include** for the articles you want
+4. Click **Prepare Finnish translations**, edit the Finnish titles and summaries, and confirm each Finnish review
+5. Click **Build Final Newsletter** to save the reviewed HTML and remember only the included source links
+6. Download and hand off for sending (e.g. via Mailchimp)
+
+The preview and download remain available across interactions. Changing the title, selection, or article text requires rebuilding the export. English edits require preparing the affected translation again; Finnish edits require renewed review. A new batch clears previous edits, approvals, and AI answers.
+
+Search memory records articles included in a final newsletter built through Streamlit. Collection, failed processing, and rejected articles do not add links. Existing history from older versions is preserved; it may include previously collected but unused links. Use **Clear search memory** if you want to reset that history. The command-line and Gradio interfaces produce drafts without marking links as used.
+
+Run the isolated workflow checks with `python -m unittest discover -s tests -v`. They use mocked AI and article responses and temporary output folders.
 
 ## Design Decisions Worth Noting
 
@@ -130,3 +137,28 @@ Built as part of a Service Design / Design Thinking university module, following
 ## License
 
 MIT — feel free to reuse or adapt.
+
+
+### Editorial newsletter design
+
+The HTML export now has a forest-green cover, editable issue label and topic themes, a featured story, alternating image/text article rows, and compact event cards. Empty sections are hidden. The layout stacks on narrow screens and includes print styles with a break after the cover. English/Finnish switching remains available; custom cover themes and image credits are shared across languages.
+
+After selecting articles, use **Newsletter design** to choose the featured story. Its approved image appears on the cover. Article extraction suggests a lead image when available; you can replace its URL or upload a PNG, JPEG, or WebP image. Add a credit and description, then explicitly include the image after checking reuse permission. Uploaded images are resized and embedded in the HTML; URL images require an internet connection and may become unavailable. Articles without images use a text layout.
+
+This is a browser-oriented HTML draft. Compatibility with email sending platforms has not yet been validated. Existing drafts do not acquire images retroactively: regenerate articles or add images through the design controls.
+
+
+### Local login
+
+Create an account from the project folder before opening the workspace:
+
+```bash
+.venv/bin/python local_auth.py add-user YOUR_USERNAME
+.venv/bin/streamlit run streamlit_app.py --server.address 127.0.0.1
+```
+
+The setup command asks for a password of at least 12 characters and confirmation without displaying either. Repeat with another username to add another editor. Accounts are stored as salted PBKDF2 password hashes in `.local/accounts.json`, excluded from Git. No default password or public registration is provided. With no account configuration, the app shows setup instructions and keeps the workspace locked.
+
+Login lasts for the current Streamlit session, up to eight hours. Refreshing may require signing in again. Logging out clears the session's draft, answers, and edits; saved HTML files and shared used-link history remain on disk. Five failed attempts trigger a 30-second delay within that session. Separate accounts currently share saved output and history, but have separate in-memory drafts.
+
+Deployment configuration can later supply `NEWSLETTER_ACCOUNTS_FILE` (absolute path to the account JSON), `OLLAMA_BASE_URL` (default `http://localhost:11434`), and `OLLAMA_MODEL` (default `qwen2.5:7b`) without modifying code. This is local prototype authentication, not a completed public hosting setup: deployment still needs HTTPS, durable storage, cross-session rate limiting or managed identity, and a decision about concurrent shared exports. The alternate Gradio interface and CLI are local development tools and do not use this login gate.

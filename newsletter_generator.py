@@ -15,6 +15,7 @@ Run locally (requires Ollama running: `ollama serve` in a separate terminal):
 """
 
 import json
+import os
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -23,9 +24,10 @@ from newspaper import Article
 from ddgs import DDGS
 
 
-OLLAMA_CHAT_URL = "http://localhost:11434/api/chat"
-OLLAMA_GENERATE_URL = "http://localhost:11434/api/generate"
-MODEL = "qwen2.5:7b"
+OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
+OLLAMA_CHAT_URL = f"{OLLAMA_BASE_URL}/api/chat"
+OLLAMA_GENERATE_URL = f"{OLLAMA_BASE_URL}/api/generate"
+MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5:7b")
 
 # Kept for compatibility with earlier code that imports OLLAMA_URL directly.
 OLLAMA_URL = OLLAMA_CHAT_URL
@@ -171,11 +173,13 @@ SECTION_TITLE_FI = {
 }
 
 
-def get_article_text(url):
+def get_article_text(url, include_image=False):
     """Download and extract the readable text of an article from a URL."""
     article = Article(url)
     article.download()
     article.parse()
+    if include_image:
+        return article.title, article.text, article.top_image or ""
     return article.title, article.text
 
 
@@ -488,12 +492,6 @@ def build_newsletter_section_from_topic(section_title, topic, max_results=5,
     else:
         links = search_topic_for_links(topic, max_results=max_results, restrict_to_site=restrict_to_site)
 
-    # Remember these links immediately, so re-running the same topic later
-    # (e.g. next newsletter cycle) surfaces fresh results instead of the
-    # same ones - even though the same websites get checked every time.
-    if links:
-        mark_links_as_used(links)
-
     return build_newsletter_section(section_title, links)
 
 
@@ -557,9 +555,6 @@ def build_newsletter_section_from_rss(section_title, feed_urls, limit_per_feed=1
     if not rss_entries:
         return {"section_title": section_title, "entries": []}
 
-    links = [e["link"] for e in rss_entries]
-    mark_links_as_used(links)
-
     print(f"\n--- Processing section: {section_title} (from RSS) ---")
     entries = []
 
@@ -571,10 +566,11 @@ def build_newsletter_section_from_rss(section_title, feed_urls, limit_per_feed=1
             # fall back to the RSS description if scraping fails (e.g.
             # the site blocks scrapers or is JS-heavy).
             try:
-                title, text = get_article_text(url)
+                title, text, image_url = get_article_text(url, include_image=True)
                 if not text or len(text) < 200:
                     raise ValueError("too little text extracted")
             except Exception:
+                image_url = ""
                 title = rss_entry["title"]
                 text = rss_entry["description"]
 
@@ -593,6 +589,8 @@ def build_newsletter_section_from_rss(section_title, feed_urls, limit_per_feed=1
                 "title": title,
                 "summary": analysis["summary"],
                 "source_url": url,
+                "image_url": image_url,
+                "image_approved": False,
                 "relevance": analysis["relevance"],
                 "reason": analysis["reason"],
                 "topics": analysis["topics"],
@@ -617,15 +615,12 @@ def build_newsletter_section(section_title, links):
 
     links = [ensure_scheme(link) for link in links if link.strip()]
     links = expand_homepage_links(links)
-    if links:
-        mark_links_as_used(links)
-
     entries = []
 
     for url in links:
         try:
             print(f"Downloading: {url}")
-            title, text = get_article_text(url)
+            title, text, image_url = get_article_text(url, include_image=True)
 
             if not text or len(text) < 200:
                 print(f"  Skipped (too little text extracted): {url}")
@@ -642,6 +637,8 @@ def build_newsletter_section(section_title, links):
                 "title": title,
                 "summary": analysis["summary"],
                 "source_url": url,
+                "image_url": image_url,
+                "image_approved": False,
                 "relevance": analysis["relevance"],
                 "reason": analysis["reason"],
                 "topics": analysis["topics"],
@@ -719,223 +716,7 @@ def format_newsletter_markdown(sections):
     return "\n".join(lines)
 
 
-def format_newsletter_html(sections, newsletter_title="Association Newsletter"):
-    """
-    Turn the processed sections into a styled, bilingual HTML newsletter.
-
-    Each entry may have English fields (title, summary) and, optionally,
-    Finnish fields (title_fi, summary_fi) added by translate_to_finnish().
-    Both versions are embedded in the same page; a toggle button (top
-    right) switches which one is visible via CSS, no page reload needed.
-    If Finnish fields are missing on an entry, the English text is used
-    for both, so the toggle never shows something blank.
-    """
-
-    def entry_html(entry):
-        title_fi = entry.get("title_fi") or entry["title"]
-        summary_fi = entry.get("summary_fi") or entry["summary"]
-        return f"""
-        <div class="entry">
-          <h3>
-            <span class="lang-en">{entry['title']}</span>
-            <span class="lang-fi">{title_fi}</span>
-          </h3>
-          <p>
-            <span class="lang-en">{entry['summary']}</span>
-            <span class="lang-fi">{summary_fi}</span>
-          </p>
-          <a class="read-more" href="{entry['source_url']}" target="_blank">
-            <span class="lang-en">Read the full source &rarr;</span>
-            <span class="lang-fi">Lue koko l&auml;hde &rarr;</span>
-          </a>
-        </div>"""
-
-    def section_html(section):
-        title_fi = SECTION_TITLE_FI.get(section["section_title"], section["section_title"])
-        if not section["entries"]:
-            body = (
-                '<p class="empty">'
-                '<span class="lang-en">No items in this section yet.</span>'
-                '<span class="lang-fi">Ei kohteita t&auml;ss&auml; osiossa viel&auml;.</span>'
-                '</p>'
-            )
-        else:
-            body = "".join(entry_html(e) for e in section["entries"])
-        return f"""
-      <section>
-        <div class="section-label">
-          <span class="lang-en">{section['section_title']}</span>
-          <span class="lang-fi">{title_fi}</span>
-        </div>
-        {body}
-      </section>"""
-
-    sections_markup = "".join(section_html(s) for s in sections)
-
-    return f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>{newsletter_title}</title>
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=Lora:wght@500;600&family=Inter:wght@400;500&display=swap');
-
-  body {{
-    margin: 0;
-    padding: 48px 20px;
-    background: #EFEAE0;
-    font-family: 'Inter', sans-serif;
-    color: #1F2A24;
-  }}
-
-  .newsletter {{
-    max-width: 620px;
-    margin: 0 auto;
-    background: #FBFAF7;
-    padding: 48px 44px;
-    border: 1px solid #DCD7CA;
-    position: relative;
-  }}
-
-  .lang-toggle {{
-    position: absolute;
-    top: 24px;
-    right: 24px;
-    font-family: 'Inter', sans-serif;
-    font-size: 13px;
-    font-weight: 500;
-    background: #FBFAF7;
-    color: #2F6F62;
-    border: 1px solid #2F6F62;
-    border-radius: 999px;
-    padding: 6px 14px;
-    cursor: pointer;
-  }}
-
-  .lang-toggle:hover {{
-    background: #2F6F62;
-    color: #FBFAF7;
-  }}
-
-  /* Language visibility: English shows by default, Finnish hidden,
-     JS below flips a class on <body> to swap them. */
-  .lang-fi {{ display: none; }}
-  body.show-fi .lang-en {{ display: none; }}
-  body.show-fi .lang-fi {{ display: inline; }}
-
-  .masthead {{
-    text-align: left;
-    border-bottom: 2px solid #2F6F62;
-    padding-bottom: 20px;
-    margin-bottom: 36px;
-    padding-right: 90px; /* keep title clear of the toggle button */
-  }}
-
-  .masthead h1 {{
-    font-family: 'Lora', serif;
-    font-weight: 600;
-    font-size: 28px;
-    margin: 0 0 6px 0;
-    color: #1F2A24;
-  }}
-
-  .masthead .note {{
-    font-size: 13px;
-    color: #6B7268;
-  }}
-
-  section {{
-    margin-bottom: 40px;
-  }}
-
-  .section-label {{
-    font-family: 'Lora', serif;
-    font-size: 15px;
-    font-weight: 600;
-    color: #C98A3E;
-    margin-bottom: 18px;
-    padding-bottom: 8px;
-    border-bottom: 1px solid #DCD7CA;
-  }}
-
-  .entry {{
-    margin-bottom: 26px;
-  }}
-
-  .entry:last-child {{
-    margin-bottom: 0;
-  }}
-
-  .entry h3 {{
-    font-family: 'Lora', serif;
-    font-size: 18px;
-    font-weight: 600;
-    margin: 0 0 8px 0;
-    color: #1F2A24;
-    line-height: 1.35;
-  }}
-
-  .entry p {{
-    font-size: 15px;
-    line-height: 1.6;
-    margin: 0 0 10px 0;
-    color: #2E362F;
-  }}
-
-  .read-more {{
-    font-size: 13px;
-    color: #2F6F62;
-    text-decoration: none;
-    font-weight: 500;
-  }}
-
-  .read-more:hover {{
-    text-decoration: underline;
-  }}
-
-  .empty {{
-    font-size: 14px;
-    color: #6B7268;
-    font-style: italic;
-  }}
-
-  .footer-note {{
-    margin-top: 36px;
-    padding-top: 20px;
-    border-top: 1px solid #DCD7CA;
-    font-size: 12px;
-    color: #6B7268;
-  }}
-</style>
-</head>
-<body>
-  <div class="newsletter">
-    <button class="lang-toggle" onclick="toggleLanguage()" id="langToggleBtn">FI</button>
-
-    <div class="masthead">
-      <h1>{newsletter_title}</h1>
-      <div class="note">
-        <span class="lang-en">AI-assisted draft &mdash; please review before sending</span>
-        <span class="lang-fi">Teko&auml;lyavusteinen luonnos &mdash; tarkista ennen l&auml;hett&auml;mist&auml;</span>
-      </div>
-    </div>
-    {sections_markup}
-    <div class="footer-note">
-      <span class="lang-en">Summaries generated locally with qwen2.5:7b via Ollama. Each item links back to its original source.</span>
-      <span class="lang-fi">Yhteenvedot luotu paikallisesti qwen2.5:7b-mallilla Ollaman kautta. Jokainen kohta linkitt&auml;&auml; alkuper&auml;iseen l&auml;hteeseen.</span>
-    </div>
-  </div>
-
-  <script>
-    function toggleLanguage() {{
-      const body = document.body;
-      const btn = document.getElementById('langToggleBtn');
-      body.classList.toggle('show-fi');
-      btn.textContent = body.classList.contains('show-fi') ? 'EN' : 'FI';
-    }}
-  </script>
-</body>
-</html>"""
+from newsletter_design import format_newsletter_html
 
 
 if __name__ == "__main__":

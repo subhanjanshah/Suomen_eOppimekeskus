@@ -8,14 +8,23 @@ Workflow:
      and an editable summary box, so a human can correct/reject anything
      before it goes out (matches the client's requirement: AI gathers,
      human verifies, then it's sent)
-  4. Click "Build Final Newsletter" -> only approved (and possibly edited)
+  4. Prepare and review Finnish translations, then build the newsletter
+     -> only approved (and possibly edited)
      items are included in the final HTML draft
 
 Run locally (requires Ollama running: `ollama serve` in a separate terminal):
     streamlit run streamlit_app.py
 """
 
+import base64
+from datetime import date
+from io import BytesIO
+from PIL import Image
+from newsletter_design import safe_url
+from copy import deepcopy
+
 import streamlit as st
+from local_auth import require_login
 
 from newsletter_generator import (
     build_newsletter_section,
@@ -23,6 +32,7 @@ from newsletter_generator import (
     build_newsletter_section_from_rss,
     format_newsletter_html,
     load_used_links,
+    mark_links_as_used,
     clear_used_links,
     translate_to_finnish,
     ask_ai_about_entries,
@@ -155,6 +165,7 @@ def source_input(label, key_prefix):
 
 
 st.set_page_config(page_title="Newsletter Draft Generator", layout="wide")
+require_login()
 
 render_sidebar()
 
@@ -172,7 +183,7 @@ if "generated_sections" not in st.session_state:
 
 newsletter_title = st.text_input(
     "Newsletter title",
-    value="Suomen eOppimiskeskus Newsletter",
+    value="Newsletter",
 )
 
 col1, col2 = st.columns(2)
@@ -189,13 +200,16 @@ if st.button("Generate Draft", type="primary"):
     with st.spinner("Searching, downloading, and summarising... this can take a minute or two."):
         sections = [events_builder(), highlights_builder()]
 
-    # Tag each entry with a stable id, and default-approve only items that
-    # scored 3+ on relevance (clearly-irrelevant items start unchecked,
-    # but can still be manually included - nothing is ever silently hidden).
+    # Clear widget state before rendering a new batch, including empty batches.
+    for key in list(st.session_state):
+        if key.startswith(("approve_", "summary_", "fi_title_", "fi_summary_", "fi_review_", "image_", "design_")):
+            del st.session_state[key]
+    for key in ("ai_answer", "ask_ai_question", "final_html", "final_snapshot"):
+        st.session_state.pop(key, None)
     for section in sections:
         for i, entry in enumerate(section["entries"]):
             entry["id"] = f"{section['section_title']}_{i}"
-            entry["approved"] = entry.get("relevance", 3) >= 3
+            entry["approved"] = False
 
     st.session_state.generated_sections = sections
 
@@ -217,8 +231,8 @@ if st.session_state.generated_sections:
     st.divider()
     st.header("Review before sending")
     st.markdown(
-        "Uncheck anything that shouldn't go out. Edit any summary directly "
-        "if it needs correcting."
+        "Review the summaries and select the articles to include. Then prepare "
+        "and review their Finnish translations before building the newsletter."
     )
 
     for section in st.session_state.generated_sections:
@@ -265,50 +279,146 @@ if st.session_state.generated_sections:
 
     st.divider()
 
-    if st.button("Build Final Newsletter", type="primary"):
-        final_sections = []
-        for section in st.session_state.generated_sections:
-            approved_entries = [e for e in section["entries"] if e["approved"]]
-            final_sections.append({
-                "section_title": section["section_title"],
-                "entries": approved_entries,
-            })
+    final_sections = [
+        {"section_title": section["section_title"],
+         "entries": [e for e in section["entries"] if e["approved"]]}
+        for section in st.session_state.generated_sections
+    ]
+    selected = [e for section in final_sections for e in section["entries"]]
 
-        total_approved = sum(len(s["entries"]) for s in final_sections)
+    design = {}
+    if selected:
+        st.subheader("Newsletter design")
+        feature = st.selectbox(
+            "Featured story and cover image", options=[e["id"] for e in selected],
+            format_func=lambda entry_id: next(e["title"] for e in selected if e["id"] == entry_id),
+            key="design_feature")
+        suggested_topics = list(dict.fromkeys(
+            str(topic) for e in selected for topic in (e.get("topics") or [])))[:4]
+        st.caption("Suggested themes: " + (", ".join(suggested_topics) or "Add your own below."))
+        topic_text = st.text_input(
+            "Cover themes (comma-separated; leave blank to use suggested themes)",
+            key="design_topics", help="Use Finnish, English, or bilingual labels. These appear in both language views.")
+        issue = st.text_input("Issue date or label", value=date.today().strftime("%m / %Y"), key="design_issue")
+        design = dict(issue_label=issue, cover_topics=(
+            [t.strip() for t in topic_text.split(",") if t.strip()][:4]
+            if topic_text.strip() else suggested_topics),
+            featured_url=next(e["source_url"] for e in selected if e["id"] == feature))
+        st.caption("Choose images you are authorised to reuse and add any required credit. "
+                   "Without an image, the layout uses a spacious text treatment.")
+        for entry in selected:
+            with st.expander("Image: " + entry["title"], expanded=True):
+                entry_id = entry["id"]
+                image_url = st.text_input("Article image URL", value=entry.get("image_url", ""),
+                                          key=f"image_url_{entry_id}")
+                upload = st.file_uploader("Or upload an image", type=["png", "jpg", "jpeg", "webp"],
+                                          key=f"image_upload_{entry_id}")
+                chosen_image = safe_url(image_url, image=True)
+                if image_url and not chosen_image:
+                    st.warning("Use an http or https image URL.")
+                if upload:
+                    try:
+                        with Image.open(upload) as uploaded_image:
+                            uploaded_image.thumbnail((1600, 1600))
+                            image_buffer = BytesIO()
+                            uploaded_image.convert("RGB").save(image_buffer, format="JPEG", quality=88)
+                        chosen_image = "data:image/jpeg;base64," + base64.b64encode(image_buffer.getvalue()).decode()
+                    except (OSError, ValueError, Image.DecompressionBombError):
+                        chosen_image = ""
+                        st.error("This image could not be read. Try a different image.")
+                # A replacement image needs its own inclusion decision.
+                if entry.get("chosen_image") != chosen_image:
+                    st.session_state[f"image_ok_{entry_id}"] = False
+                entry["chosen_image"] = chosen_image
+                entry["image_url"] = chosen_image
+                if not chosen_image:
+                    st.info("No image is available for this article. Paste a direct image URL "
+                            "or upload a picture above. Articles gathered before the design update "
+                            "need an image added here or a fresh Generate Draft run.")
+                if chosen_image:
+                    st.image(base64.b64decode(chosen_image.split(",", 1)[1])
+                             if chosen_image.startswith("data:") else chosen_image, width=320)
+                entry["image_credit"] = st.text_input("Image credit", key=f"image_credit_{entry_id}")
+                entry["image_alt"] = st.text_input("Image description (accessibility)", key=f"image_alt_{entry_id}")
+                entry["image_approved"] = st.checkbox(
+                    "Include this image — I have checked permission and credit",
+                    key=f"image_ok_{entry_id}", disabled=not chosen_image)
 
-        if total_approved == 0:
-            st.error("No items are approved. Check at least one item above.")
-        else:
-            with st.spinner("Translating approved items to Finnish for the language toggle..."):
-                for section in final_sections:
-                    for entry in section["entries"]:
-                        # Translate the final (possibly human-edited) English
-                        # text, so the Finnish version matches any corrections
-                        # made during review.
-                        title_fi, summary_fi = translate_to_finnish(
-                            entry["title"], entry["summary"]
-                        )
-                        entry["title_fi"] = title_fi
-                        entry["summary_fi"] = summary_fi
+        included_images = sum(bool(e.get("image_approved") and e.get("image_url")) for e in selected)
+        st.caption(f"Images included: {included_images} of {len(selected)} articles.")
+        featured_entry = next(e for e in selected if e["id"] == feature)
+        if not (featured_entry.get("image_approved") and featured_entry.get("image_url")):
+            st.warning("The cover currently has no image. Add or select a picture for the featured "
+                       "story above and check ‘Include this image’ to show it on the cover.")
 
-            html = format_newsletter_html(
-                final_sections, newsletter_title=newsletter_title or "Newsletter"
-            )
+    if st.button("Prepare Finnish translations", disabled=not selected):
+        with st.spinner("Preparing Finnish translations for review..."):
+            for entry in selected:
+                source = (entry["title"], entry["summary"])
+                # Preserve reviewed edits unless the English source changed.
+                if entry.get("translation_source") == source:
+                    continue
+                title_fi, summary_fi = translate_to_finnish(*source)
+                entry.update(title_fi=title_fi, summary_fi=summary_fi,
+                             translation_source=source)
+                st.session_state[f"fi_title_{entry['id']}"] = title_fi
+                st.session_state[f"fi_summary_{entry['id']}"] = summary_fi
+                st.session_state[f"fi_review_{entry['id']}"] = False
 
-            with open("newsletter_draft.html", "w") as f:
+    def reset_finnish_review(entry_id):
+        st.session_state[f"fi_review_{entry_id}"] = False
+
+    ready = bool(selected)
+    for entry in selected:
+        source = (entry["title"], entry["summary"])
+        if entry.get("translation_source") != source:
+            st.info(f"Prepare Finnish translation for: {entry['title']}")
+            ready = False
+            continue
+        with st.container(border=True):
+            st.subheader("Finnish review: " + entry["title"])
+            if (entry["title_fi"], entry["summary_fi"]) == source:
+                st.warning("Translation may have fallen back to the original text. "
+                           "Check and correct the Finnish text before approving.")
+            entry["title_fi"] = st.text_input(
+                "Finnish title", key=f"fi_title_{entry['id']}",
+                on_change=reset_finnish_review, args=(entry["id"],))
+            entry["summary_fi"] = st.text_area(
+                "Finnish summary", key=f"fi_summary_{entry['id']}",
+                on_change=reset_finnish_review, args=(entry["id"],))
+            reviewed = st.checkbox("I have reviewed the Finnish title and summary",
+                                   key=f"fi_review_{entry['id']}")
+            if not reviewed or not entry["title_fi"].strip() or not entry["summary_fi"].strip():
+                ready = False
+
+    # A saved export must match the current selection, title, and edits.
+    snapshot = {"title": newsletter_title, "sections": final_sections, "design": design}
+    if not ready or st.session_state.get("final_snapshot") != snapshot:
+        st.session_state.pop("final_html", None)
+        st.session_state.pop("final_snapshot", None)
+
+    if st.button("Build Final Newsletter", type="primary", disabled=not ready):
+        html = format_newsletter_html(
+            final_sections, newsletter_title=newsletter_title or "Newsletter", **design)
+        try:
+            with open("newsletter_draft.html", "w", encoding="utf-8") as f:
                 f.write(html)
+            mark_links_as_used([e["source_url"] for e in selected])
+        except OSError as exc:
+            st.error(f"Could not save the newsletter and its used-link history: {exc}")
+        else:
+            st.session_state.final_html = html
+            st.session_state.final_snapshot = deepcopy(snapshot)
+            st.rerun()
 
-            st.success(f"Final newsletter built with {total_approved} approved item(s).")
-
-            st.subheader("Final Preview")
-            st.components.v1.html(html, height=700, scrolling=True)
-
-            st.download_button(
-                label="Download final newsletter (HTML)",
-                data=html,
-                file_name="newsletter_draft.html",
-                mime="text/html",
-            )
+    if "final_html" in st.session_state:
+        st.success(f"Final newsletter built with {len(selected)} reviewed item(s).")
+        st.subheader("Final Preview")
+        st.components.v1.html(st.session_state.final_html, height=700, scrolling=True)
+        st.download_button(
+            label="Download final newsletter (HTML)",
+            data=st.session_state.final_html, file_name="newsletter_draft.html",
+            mime="text/html")
 
 # --- ASK AI ---
 if st.session_state.generated_sections:
