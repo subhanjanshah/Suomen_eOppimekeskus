@@ -23,8 +23,12 @@ from newspaper import Article
 from ddgs import DDGS
 
 
-OLLAMA_URL = "http://localhost:11434/api/chat"
+OLLAMA_CHAT_URL = "http://localhost:11434/api/chat"
+OLLAMA_GENERATE_URL = "http://localhost:11434/api/generate"
 MODEL = "qwen2.5:7b"
+
+# Kept for compatibility with earlier code that imports OLLAMA_URL directly.
+OLLAMA_URL = OLLAMA_CHAT_URL
 
 # --- Source reliability settings ---
 
@@ -226,25 +230,125 @@ def expand_homepage_links(links, limit_per_site=5, avoid_repeats=True):
     return expanded
 
 
-def summarise_with_qwen(title, text):
-    """Two-step chat: send article as context, then ask for a summary."""
-    # Trim very long articles - smaller local models are less reliable
-    # on very long inputs (we saw this cause hallucination in testing)
+RELEVANCE_TOPICS_GUIDE = """
+RELEVANT TOPICS INCLUDE (non-exhaustive):
+- Education & learning: teaching, pedagogy, schools, universities, adult
+  education, lifelong learning, curriculum, assessment, learning research
+- Digital learning: e-learning, online/hybrid learning, LMS platforms,
+  digital learning materials and methods
+- Artificial intelligence: AI in education, AI tools, AI literacy, AI
+  policy, responsible/ethical AI
+- Educational technology: EdTech, learning analytics, VR/AR, adaptive
+  and personalised learning
+- Digital skills & competence: digital/media/information literacy,
+  future skills, reskilling, upskilling
+- Working life: future of work, hybrid work, workplace learning,
+  digital transformation, automation
+- Accessibility & responsibility: inclusive education, digital
+  accessibility, data protection, sustainability
+- Policy & development: education policy, EU digital education
+  initiatives, research/funding projects
+- Newsletter-worthy content: new reports, studies, funding
+  opportunities, events, webinars, new tools/platforms, major policy
+  changes, emerging trends
+
+RELEVANCE SCALE:
+1 = Completely unrelated (e.g. sports, celebrity news, unrelated politics)
+2 = Weak connection - mentions education/tech/work but little useful content
+3 = Potentially relevant - meaningful connection, a human should review it
+4 = Clearly relevant - useful for professionals in digital learning/EdTech/AI
+5 = Highly relevant - directly about digital learning, EdTech, AI in
+    education, major research, significant policy or funding news
+
+Do not score an article 1 just because it isn't specifically about
+e-learning - education, teaching, skills, AI, and working-life changes
+are all relevant. A clearly education/learning-related article should
+normally score at least 3.
+"""
+
+ANALYSIS_INSTRUCTION = f"""
+You are an information-monitoring assistant helping an e-learning
+association decide what to include in their member newsletter.
+
+Read the article below and return your analysis.
+
+{RELEVANCE_TOPICS_GUIDE}
+
+SUMMARY RULES (copyright-safe):
+- Use ONLY facts explicitly stated in the article text provided.
+- Do not invent names, numbers, or details not in the text.
+- Do not copy sentences directly from the article - write the summary
+  entirely in your own words (2-3 sentences, English, newsletter tone).
+
+Return ONLY valid JSON, with exactly this structure and nothing else
+before or after it:
+{{
+  "relevance": 3,
+  "reason": "One short sentence explaining the relevance score.",
+  "summary": "2-3 sentence original-wording summary in English.",
+  "topics": ["topic 1", "topic 2"]
+}}
+"""
+
+
+def analyze_and_summarise(title, text, source_label=""):
+    """
+    Analyze one article: score its relevance (1-5) for the newsletter,
+    explain why, summarise it (copyright-safe, own words), and tag it
+    with topics - all in a single structured call.
+
+    Uses Ollama's /api/generate with format="json" and temperature=0,
+    which is more reliable/parseable than free-form chat output.
+
+    Returns a dict: {relevance, reason, summary, topics}. Falls back to
+    a safe default (relevance=0) if the call or parsing fails, so a
+    single bad article never crashes the whole batch.
+    """
     max_chars = 6000
     trimmed_text = text[:max_chars]
 
-    messages = [
-        {"role": "user", "content": f"Title: {title}\n\nArticle: {trimmed_text}"},
-        {"role": "user", "content": SUMMARY_INSTRUCTION},
-    ]
-
-    response = requests.post(
-        OLLAMA_URL,
-        json={"model": MODEL, "messages": messages, "stream": False},
-        timeout=120,
+    prompt = (
+        f"{ANALYSIS_INSTRUCTION}\n\n"
+        f"Source: {source_label}\n"
+        f"Title: {title}\n\n"
+        f"Article text:\n{trimmed_text}"
     )
-    response.raise_for_status()
-    return response.json()["message"]["content"].strip()
+
+    try:
+        response = requests.post(
+            OLLAMA_GENERATE_URL,
+            json={
+                "model": MODEL,
+                "prompt": prompt,
+                "stream": False,
+                "format": "json",
+                "options": {"temperature": 0},
+            },
+            timeout=120,
+        )
+        response.raise_for_status()
+        raw = response.json()["response"]
+        analysis = json.loads(raw)
+
+        return {
+            "relevance": int(analysis.get("relevance", 0) or 0),
+            "reason": analysis.get("reason", ""),
+            "summary": analysis.get("summary", ""),
+            "topics": analysis.get("topics", []) or [],
+        }
+
+    except requests.exceptions.RequestException as e:
+        print(f"  Could not reach Ollama for analysis: {e}")
+        return {"relevance": 0, "reason": "Could not connect to Ollama.",
+                "summary": "", "topics": []}
+    except (json.JSONDecodeError, KeyError, ValueError) as e:
+        print(f"  Could not parse AI analysis response: {e}")
+        return {"relevance": 0, "reason": "The AI returned an unreadable response.",
+                "summary": "", "topics": []}
+    except Exception as e:
+        print(f"  Unexpected error during analysis: {e}")
+        return {"relevance": 0, "reason": "Unexpected error during analysis.",
+                "summary": "", "topics": []}
 
 
 def translate_to_finnish(title_en, summary_en):
@@ -393,6 +497,114 @@ def build_newsletter_section_from_topic(section_title, topic, max_results=5,
     return build_newsletter_section(section_title, links)
 
 
+# --- RSS feed discovery ---
+# RSS is a more reliable discovery method than scanning a homepage's raw
+# HTML (see the YLE homepage-scanning issue) for any site that publishes
+# a feed. Several of the client's trusted sources support this.
+RSS_FEEDS = {
+    "Opetushallitus (OPH)": "https://oph.fi/fi/latest.rss",
+    "Theseus": "https://www.theseus.fi/feed/rss_2.0/site",
+}
+
+
+def fetch_rss_entries(feed_urls, limit_per_feed=10):
+    """
+    Fetch entries from one or more RSS feeds using feedparser.
+    Returns a list of dicts: {title, link, description, source}.
+    Applies the same blocklist + duplicate-avoidance used elsewhere.
+    """
+    import feedparser
+
+    used_links = load_used_links()
+    results = []
+
+    for feed_url in feed_urls:
+        print(f"Reading RSS feed: {feed_url}")
+        try:
+            feed = feedparser.parse(feed_url)
+        except Exception as e:
+            print(f"  Could not read feed {feed_url}: {e}")
+            continue
+
+        if getattr(feed, "bozo", False):
+            print(f"  Feed warning for {feed_url}: {feed.bozo_exception}")
+
+        for entry in feed.entries[:limit_per_feed]:
+            link = entry.get("link", "")
+            if not link or is_blocked_domain(link) or link in used_links:
+                continue
+
+            description = entry.get("summary", "") or entry.get("description", "")
+
+            results.append({
+                "title": entry.get("title", "No title"),
+                "link": link,
+                "description": description,
+                "source": _get_domain(link),
+            })
+
+    return results
+
+
+def build_newsletter_section_from_rss(section_title, feed_urls, limit_per_feed=10):
+    """
+    Fetch articles from RSS feeds, then analyse/summarise each one - same
+    pipeline as the other discovery methods, so results are consistent
+    (relevance scoring, bilingual translation at final build, etc.).
+    """
+    rss_entries = fetch_rss_entries(feed_urls, limit_per_feed=limit_per_feed)
+
+    if not rss_entries:
+        return {"section_title": section_title, "entries": []}
+
+    links = [e["link"] for e in rss_entries]
+    mark_links_as_used(links)
+
+    print(f"\n--- Processing section: {section_title} (from RSS) ---")
+    entries = []
+
+    for rss_entry in rss_entries:
+        url = rss_entry["link"]
+        try:
+            print(f"Downloading: {url}")
+            # Try to get the full article text for a better summary;
+            # fall back to the RSS description if scraping fails (e.g.
+            # the site blocks scrapers or is JS-heavy).
+            try:
+                title, text = get_article_text(url)
+                if not text or len(text) < 200:
+                    raise ValueError("too little text extracted")
+            except Exception:
+                title = rss_entry["title"]
+                text = rss_entry["description"]
+
+            if not text or len(text) < 50:
+                print(f"  Skipped (no usable content, even from RSS description): {url}")
+                continue
+
+            print("  Analysing and summarising...")
+            analysis = analyze_and_summarise(title, text, source_label=rss_entry["source"])
+
+            if not analysis["summary"]:
+                print(f"  Skipped (AI analysis failed): {url}")
+                continue
+
+            entries.append({
+                "title": title,
+                "summary": analysis["summary"],
+                "source_url": url,
+                "relevance": analysis["relevance"],
+                "reason": analysis["reason"],
+                "topics": analysis["topics"],
+            })
+            print(f"  Done. Relevance: {analysis['relevance']}/5")
+
+        except Exception as e:
+            print(f"  Failed to process {url}: {e}")
+
+    return {"section_title": section_title, "entries": entries}
+
+
 def build_newsletter_section(section_title, links):
     """Process a list of links into one newsletter section (e.g. 'Events').
 
@@ -419,20 +631,74 @@ def build_newsletter_section(section_title, links):
                 print(f"  Skipped (too little text extracted): {url}")
                 continue
 
-            print("  Summarising...")
-            summary = summarise_with_qwen(title, text)
+            print("  Analysing and summarising...")
+            analysis = analyze_and_summarise(title, text, source_label=_get_domain(url))
+
+            if not analysis["summary"]:
+                print(f"  Skipped (AI analysis failed or returned no summary): {url}")
+                continue
 
             entries.append({
                 "title": title,
-                "summary": summary,
+                "summary": analysis["summary"],
                 "source_url": url,
+                "relevance": analysis["relevance"],
+                "reason": analysis["reason"],
+                "topics": analysis["topics"],
             })
-            print("  Done.")
+            print(f"  Done. Relevance: {analysis['relevance']}/5")
 
         except Exception as e:
             print(f"  Failed to process {url}: {e}")
 
     return {"section_title": section_title, "entries": entries}
+
+
+def ask_ai_about_entries(question, all_entries):
+    """
+    Answer a free-form question about the currently gathered entries
+    (e.g. "what trends do you see?"). Keeps everything grounded in the
+    actual gathered data rather than letting the model invent things.
+    """
+    if not all_entries:
+        context = "No articles have been gathered yet."
+    else:
+        context_parts = []
+        for i, entry in enumerate(all_entries, start=1):
+            topics = ", ".join(entry.get("topics", []) or [])
+            context_parts.append(
+                f"Article {i}\n"
+                f"Title: {entry.get('title', '')}\n"
+                f"Relevance: {entry.get('relevance', '-')}/5\n"
+                f"Summary: {entry.get('summary', '')}\n"
+                f"Topics: {topics}\n"
+                f"Source: {entry.get('source_url', '')}"
+            )
+        context = "\n\n".join(context_parts)
+
+    prompt = (
+        "You are an assistant helping a newsletter editor understand the "
+        "articles they've gathered so far. Answer using ONLY the "
+        "information below - do not invent articles or facts that "
+        "aren't there. If you can't answer from this data, say so.\n\n"
+        f"GATHERED ARTICLES:\n{context}\n\n"
+        f"QUESTION: {question}"
+    )
+
+    try:
+        response = requests.post(
+            OLLAMA_CHAT_URL,
+            json={
+                "model": MODEL,
+                "messages": [{"role": "user", "content": prompt}],
+                "stream": False,
+            },
+            timeout=120,
+        )
+        response.raise_for_status()
+        return response.json()["message"]["content"].strip()
+    except Exception as e:
+        return f"Could not get an answer from the AI: {e}"
 
 
 def format_newsletter_markdown(sections):

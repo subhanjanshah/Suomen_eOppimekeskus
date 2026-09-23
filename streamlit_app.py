@@ -20,11 +20,14 @@ import streamlit as st
 from newsletter_generator import (
     build_newsletter_section,
     build_newsletter_section_from_topic,
+    build_newsletter_section_from_rss,
     format_newsletter_html,
     load_used_links,
     clear_used_links,
     translate_to_finnish,
+    ask_ai_about_entries,
     CLIENT_TRUSTED_SOURCES,
+    RSS_FEEDS,
 )
 
 
@@ -53,11 +56,11 @@ def parse_links(raw_text):
 
 
 def source_input(label, key_prefix):
-    """Renders the mode toggle (Paste links / Search by topic) and returns
-    a function that produces the section dict when called."""
+    """Renders the mode toggle (Paste links / Search by topic / RSS feeds)
+    and returns a function that produces the section dict when called."""
     mode = st.radio(
         f"{label} - source",
-        ["Paste links", "Search by topic"],
+        ["Paste links", "Search by topic", "RSS feeds"],
         key=f"{key_prefix}_mode",
         horizontal=True,
     )
@@ -72,6 +75,38 @@ def source_input(label, key_prefix):
 
         def build():
             return build_newsletter_section(label, parse_links(links_text))
+
+        return build
+
+    elif mode == "RSS feeds":
+        feed_names = st.multiselect(
+            "Check these RSS feeds",
+            options=list(RSS_FEEDS.keys()),
+            key=f"{key_prefix}_feeds",
+            help="Pulls the latest entries directly from each feed - more "
+                 "reliable than scanning a homepage for sites that "
+                 "publish RSS.",
+        )
+        custom_feed_url = st.text_input(
+            "Or a custom feed URL (optional)",
+            key=f"{key_prefix}_custom_feed",
+            placeholder="e.g. https://example.com/feed/rss",
+        )
+        limit_per_feed = st.slider(
+            "Max entries per feed",
+            min_value=1, max_value=20, value=10,
+            key=f"{key_prefix}_rss_limit",
+        )
+
+        def build():
+            feed_urls = [RSS_FEEDS[name] for name in feed_names]
+            if custom_feed_url.strip():
+                feed_urls.append(custom_feed_url.strip())
+            if not feed_urls:
+                return {"section_title": label, "entries": []}
+            return build_newsletter_section_from_rss(
+                label, feed_urls, limit_per_feed=limit_per_feed
+            )
 
         return build
 
@@ -154,12 +189,13 @@ if st.button("Generate Draft", type="primary"):
     with st.spinner("Searching, downloading, and summarising... this can take a minute or two."):
         sections = [events_builder(), highlights_builder()]
 
-    # Tag each entry with a stable id + default approved=True, so checkboxes
-    # have something to key off across reruns.
+    # Tag each entry with a stable id, and default-approve only items that
+    # scored 3+ on relevance (clearly-irrelevant items start unchecked,
+    # but can still be manually included - nothing is ever silently hidden).
     for section in sections:
         for i, entry in enumerate(section["entries"]):
             entry["id"] = f"{section['section_title']}_{i}"
-            entry["approved"] = True
+            entry["approved"] = entry.get("relevance", 3) >= 3
 
     st.session_state.generated_sections = sections
 
@@ -191,7 +227,11 @@ if st.session_state.generated_sections:
 
         st.subheader(section["section_title"])
 
-        for entry in section["entries"]:
+        sorted_entries = sorted(
+            section["entries"], key=lambda e: e.get("relevance", 0), reverse=True
+        )
+
+        for entry in sorted_entries:
             with st.container(border=True):
                 approve_col, content_col = st.columns([1, 8])
 
@@ -203,7 +243,13 @@ if st.session_state.generated_sections:
                     )
 
                 with content_col:
-                    st.markdown(f"**{entry['title']}**")
+                    relevance = entry.get("relevance", 0)
+                    badge = {5: "🟢", 4: "🟢", 3: "🟡", 2: "🟠", 1: "🔴", 0: "⚪"}.get(relevance, "⚪")
+                    st.markdown(f"**{entry['title']}**  {badge} Relevance: {relevance}/5")
+
+                    if entry.get("reason"):
+                        st.caption(f"Why: {entry['reason']}")
+
                     entry["summary"] = st.text_area(
                         "Summary (editable)",
                         value=entry["summary"],
@@ -211,6 +257,10 @@ if st.session_state.generated_sections:
                         height=90,
                         label_visibility="collapsed",
                     )
+
+                    if entry.get("topics"):
+                        st.caption("Topics: " + ", ".join(entry["topics"]))
+
                     st.caption(f"Source: {entry['source_url']}")
 
     st.divider()
@@ -259,3 +309,38 @@ if st.session_state.generated_sections:
                 file_name="newsletter_draft.html",
                 mime="text/html",
             )
+
+# --- ASK AI ---
+if st.session_state.generated_sections:
+    st.divider()
+    st.header("Ask AI about the gathered articles")
+
+    all_entries = [
+        entry
+        for section in st.session_state.generated_sections
+        for entry in section["entries"]
+    ]
+
+    if all_entries:
+        st.caption(f"AI has access to {len(all_entries)} gathered article(s).")
+    else:
+        st.info("No articles gathered yet - generate a draft first.")
+
+    question = st.text_area(
+        "Your question",
+        placeholder="e.g. What trends do you see across these articles?",
+        height=90,
+        key="ask_ai_question",
+    )
+
+    if st.button("Ask AI"):
+        if not question.strip():
+            st.warning("Please enter a question.")
+        else:
+            with st.spinner("AI is thinking..."):
+                answer = ask_ai_about_entries(question, all_entries)
+            st.session_state["ai_answer"] = answer
+
+    if "ai_answer" in st.session_state:
+        st.subheader("AI response")
+        st.write(st.session_state["ai_answer"])
