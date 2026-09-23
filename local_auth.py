@@ -10,6 +10,7 @@ import secrets
 import time
 
 import streamlit as st
+from app_style import login_brand
 
 ITERATIONS = 600_000
 SESSION_SECONDS = 8 * 60 * 60
@@ -71,11 +72,16 @@ def require_login():
             return
         clear_session()
 
-    _, center, _ = st.columns([1, 2, 1])
-    with center:
-        st.markdown('### Suomen eOppimiskeskus ry')
+    with st.container(key='login_shell'):
+        brand, center = st.columns([1, 1.12], gap='small')
+        with brand:
+            login_brand()
+        with center:
+            card = st.container(key='login_card')
+    with card:
+        st.markdown('<div class="brand-kicker">Your editorial space</div>', unsafe_allow_html=True)
         st.title('Welcome back')
-        st.write('Sign in to your newsletter workspace.')
+        st.write('Sign in to bring your next issue to life.')
         if not accounts:
             st.info('Create your first local account in the terminal, then refresh this page.')
             st.code('.venv/bin/python local_auth.py add-user YOUR_USERNAME', language='bash')

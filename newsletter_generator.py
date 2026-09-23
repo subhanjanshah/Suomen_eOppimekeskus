@@ -16,7 +16,7 @@ Run locally (requires Ollama running: `ollama serve` in a separate terminal):
 
 import json
 from pathlib import Path
-from urllib.parse import urlparsewe
+from urllib.parse import urlparse
 
 import requests
 from newspaper import Article

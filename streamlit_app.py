@@ -25,6 +25,7 @@ from copy import deepcopy
 
 import streamlit as st
 from local_auth import require_login
+from app_style import apply_style, workspace_header
 
 from newsletter_generator import (
     build_newsletter_section,
@@ -165,16 +166,12 @@ def source_input(label, key_prefix):
 
 
 st.set_page_config(page_title="Newsletter Draft Generator", layout="wide")
+apply_style()
 require_login()
 
 render_sidebar()
 
-st.title("Newsletter Draft Generator")
-st.markdown(
-    "Either paste links directly, or type a topic and let the AI search "
-    "the web for you. Every item must be reviewed and approved before it "
-    "goes into the final draft."
-)
+workspace_header()
 
 # Session state holds the generated (but not-yet-approved) sections across
 # button clicks, since Streamlit reruns the whole script on every interaction.
@@ -229,6 +226,7 @@ if st.button("Generate Draft", type="primary"):
 # --- REVIEW STEP ---
 if st.session_state.generated_sections:
     st.divider()
+    st.markdown('<div id="review"></div>', unsafe_allow_html=True)
     st.header("Review before sending")
     st.markdown(
         "Review the summaries and select the articles to include. Then prepare "
@@ -288,6 +286,7 @@ if st.session_state.generated_sections:
 
     design = {}
     if selected:
+        st.markdown('<div id="design"></div>', unsafe_allow_html=True)
         st.subheader("Newsletter design")
         feature = st.selectbox(
             "Featured story and cover image", options=[e["id"] for e in selected],
@@ -397,6 +396,7 @@ if st.session_state.generated_sections:
         st.session_state.pop("final_html", None)
         st.session_state.pop("final_snapshot", None)
 
+    st.markdown('<div id="export"></div>', unsafe_allow_html=True)
     if st.button("Build Final Newsletter", type="primary", disabled=not ready):
         html = format_newsletter_html(
             final_sections, newsletter_title=newsletter_title or "Newsletter", **design)
