@@ -17,7 +17,7 @@ Run locally (requires Ollama running: `ollama serve` in a separate terminal):
 """
 
 import base64
-from datetime import date
+from datetime import date, timedelta
 from io import BytesIO
 from PIL import Image
 from newsletter_design import safe_url
@@ -66,9 +66,9 @@ def parse_links(raw_text):
     return [line.strip() for line in raw_text.splitlines() if line.strip()]
 
 
-def source_input(label, key_prefix):
-    """Renders the mode toggle (Paste links / Search by topic / RSS feeds)
-    and returns a function that produces the section dict when called."""
+def source_input(label, key_prefix, date_options=None):
+    """Render collection controls and return a builder with shared date settings."""
+    date_options = date_options or {}
     mode = st.radio(
         f"{label} - source",
         ["Paste links", "Search by topic", "RSS feeds"],
@@ -85,7 +85,7 @@ def source_input(label, key_prefix):
         )
 
         def build():
-            return build_newsletter_section(label, parse_links(links_text))
+            return build_newsletter_section(label, parse_links(links_text), **date_options)
 
         return build
 
@@ -116,7 +116,7 @@ def source_input(label, key_prefix):
             if not feed_urls:
                 return {"section_title": label, "entries": []}
             return build_newsletter_section_from_rss(
-                label, feed_urls, limit_per_feed=limit_per_feed
+                label, feed_urls, limit_per_feed=limit_per_feed, **date_options
             )
 
         return build
@@ -159,7 +159,7 @@ def source_input(label, key_prefix):
 
             return build_newsletter_section_from_topic(
                 label, topic, max_results=num_results,
-                sites=sites or None,
+                sites=sites or None, **date_options,
             )
 
         return build
@@ -183,17 +183,38 @@ newsletter_title = st.text_input(
     value="Newsletter",
 )
 
+st.subheader("Article publication dates")
+filter_dates = st.checkbox("Filter by publication date", key="filter_dates")
+date_options = {}
+date_valid = True
+if filter_dates:
+    start_col, end_col = st.columns(2)
+    with start_col:
+        start = st.date_input("Published from", value=date.today() - timedelta(days=30),
+                              min_value=date(1900, 1, 1), max_value=date.today(), key="published_from")
+    with end_col:
+        end = st.date_input("Published through", value=date.today(),
+                            min_value=date(1900, 1, 1), max_value=date.today(), key="published_through")
+    undated = st.checkbox("Also include articles with unknown publication dates", value=False,
+                          key="include_undated")
+    date_valid = start is not None and end is not None and start <= end
+    if not date_valid:
+        st.error("Select both dates, with the start on or before the end.")
+    date_options = dict(start_date=start, end_date=end, include_undated=undated)
+    st.caption("Both dates are included. This checks article publication dates, not event dates. "
+               "Filtering happens before AI analysis; search results and feeds may not contain every article in the range.")
+
 col1, col2 = st.columns(2)
 
 with col1:
     st.subheader("Events")
-    events_builder = source_input("Events", "events")
+    events_builder = source_input("Events", "events", date_options)
 
 with col2:
     st.subheader("Field Highlights")
-    highlights_builder = source_input("Field Highlights", "highlights")
+    highlights_builder = source_input("Field Highlights", "highlights", date_options)
 
-if st.button("Generate Draft", type="primary"):
+if st.button("Generate Draft", type="primary", disabled=not date_valid):
     with st.spinner("Searching, downloading, and summarising... this can take a minute or two."):
         sections = [events_builder(), highlights_builder()]
 
@@ -209,12 +230,13 @@ if st.button("Generate Draft", type="primary"):
             entry["approved"] = False
 
     st.session_state.generated_sections = sections
+    st.session_state.generated_date_options = dict(date_options)
 
     total = sum(len(s["entries"]) for s in sections)
     if total == 0:
         st.error(
             "No items were generated. This can happen if: Ollama isn't "
-            "running, the links/topic were empty, or - if you pasted a "
+            "running, the links/topic were empty, no articles matched the date settings, or - if you pasted a "
             "site homepage - the site's article links couldn't be found "
             "automatically (common on modern, JavaScript-heavy sites). "
             "If a homepage link didn't work, try 'Search by topic' with "
@@ -228,6 +250,16 @@ if st.session_state.generated_sections:
     st.divider()
     st.markdown('<div id="review"></div>', unsafe_allow_html=True)
     st.header("Review before sending")
+    if st.session_state.get("generated_date_options", {}) != date_options:
+        st.warning("Date settings changed. Click Generate Draft to apply them; the articles below are from the previous run.")
+    applied = st.session_state.get("generated_date_options", {})
+    if applied:
+        st.caption(f"Collected for publication dates {applied['start_date']} to {applied['end_date']} (inclusive).")
+    for section in st.session_state.generated_sections:
+        excluded = section.get("date_excluded", {})
+        if sum(excluded.values()):
+            st.caption(f"{section['section_title']}: excluded {excluded.get('outside_range', 0)} outside the date range "
+                       f"and {excluded.get('unknown_date', 0)} with unknown publication dates.")
     st.markdown(
         "Review the summaries and select the articles to include. Then prepare "
         "and review their Finnish translations before building the newsletter."
@@ -273,6 +305,7 @@ if st.session_state.generated_sections:
                     if entry.get("topics"):
                         st.caption("Topics: " + ", ".join(entry["topics"]))
 
+                    st.caption("Published: " + (entry.get("published_date") or "Unknown — check the source"))
                     st.caption(f"Source: {entry['source_url']}")
 
     st.divider()

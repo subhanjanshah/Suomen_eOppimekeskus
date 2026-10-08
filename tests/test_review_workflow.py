@@ -21,7 +21,7 @@ class ReviewWorkflowTests(unittest.TestCase):
 
     def test_collection_does_not_consume_links(self):
         analysis = {'summary': 'Summary', 'relevance': 4, 'reason': 'Relevant', 'topics': []}
-        with patch.object(generator, 'get_article_text', return_value=('Title', 'article ' * 50, '')), \
+        with patch.object(generator, 'get_article_text', return_value=('Title', 'article ' * 50, '', None)), \
              patch.object(generator, 'analyze_and_summarise', return_value=analysis), \
              patch.object(generator, 'search_topic_for_links', return_value=['https://example.org/article']), \
              patch.object(generator, 'fetch_rss_entries', return_value=[dict(title='Title', link='https://example.org/rss', description='text', source='example.org')]):
@@ -34,7 +34,7 @@ class ReviewWorkflowTests(unittest.TestCase):
         self.assertEqual(generator.load_used_links(), set())
 
     def test_review_export_and_new_batch(self):
-        def build(label, links):
+        def build(label, links, **kwargs):
             return {'section_title': label, 'entries': [dict(
                 title='Article', summary='Original summary', source_url='https://example.org/article',
                 relevance=4, reason='Relevant', topics=[]), dict(

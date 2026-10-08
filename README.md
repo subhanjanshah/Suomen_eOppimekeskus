@@ -162,3 +162,12 @@ The setup command asks for a password of at least 12 characters and confirmation
 Login lasts for the current Streamlit session, up to eight hours. Refreshing may require signing in again. Logging out clears the session's draft, answers, and edits; saved HTML files and shared used-link history remain on disk. Five failed attempts trigger a 30-second delay within that session. Separate accounts currently share saved output and history, but have separate in-memory drafts.
 
 Deployment configuration can later supply `NEWSLETTER_ACCOUNTS_FILE` (absolute path to the account JSON), `OLLAMA_BASE_URL` (default `http://localhost:11434`), and `OLLAMA_MODEL` (default `qwen2.5:7b`) without modifying code. This is local prototype authentication, not a completed public hosting setup: deployment still needs HTTPS, durable storage, cross-session rate limiting or managed identity, and a decision about concurrent shared exports. The alternate Gradio interface and CLI are local development tools and do not use this login gate.
+
+
+### Article publication calendars
+
+Enable **Filter by publication date**, then select **Published from** and **Published through** before generating a draft. Both calendar dates are included and apply to Events and Field Highlights across pasted links, topic search, and RSS. Invalid ranges disable generation. Dates refer to article publication, not event dates, and retain the source's calendar day.
+
+Articles outside the range are skipped before AI analysis. Unknown dates are excluded by default when filtering is enabled; optionally include them for manual review. Review shows publication dates, exclusion counts, and a warning if you change the calendars after generating. Click Generate Draft to apply new settings.
+
+RSS uses its published date when available, otherwise the extracted article date. Update dates are not substituted for RSS publication dates. Article dates depend on newspaper3k extraction and can be missing or inaccurate. The filter checks discovered candidates; it does not guarantee an exhaustive historical search. Search result limits, RSS feed retention, and previously used links can reduce the number of matching results. Leave filtering disabled for the original any-date behaviour.

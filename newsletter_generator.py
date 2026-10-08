@@ -15,6 +15,7 @@ Run locally (requires Ollama running: `ollama serve` in a separate terminal):
 """
 
 import json
+from publication_dates import publication_date, exclusion_reason, validate_range
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -171,14 +172,17 @@ SECTION_TITLE_FI = {
 }
 
 
-def get_article_text(url, include_image=False):
+def get_article_text(url, include_image=False, include_date=False):
     """Download and extract the readable text of an article from a URL."""
     article = Article(url)
     article.download()
     article.parse()
+    result = (article.title, article.text)
     if include_image:
-        return article.title, article.text, article.top_image or ""
-    return article.title, article.text
+        result += (article.top_image or "",)
+    if include_date:
+        result += (publication_date(article.publish_date),)
+    return result
 
 
 def looks_like_homepage_or_section(url):
@@ -478,19 +482,22 @@ def search_multiple_sites_for_links(topic, sites, max_results_total=5, avoid_rep
 
 
 def build_newsletter_section_from_topic(section_title, topic, max_results=5,
-                                         restrict_to_site=None, sites=None):
+                                         restrict_to_site=None, sites=None,
+                                         start_date=None, end_date=None, include_undated=True):
     """Search for a topic, then build a newsletter section from the results
     (combines discovery + summarisation in one step).
 
     Provide either `restrict_to_site` (a single domain) or `sites`
     (a list of domains to search across, e.g. the client's trusted list).
     """
+    validate_range(start_date, end_date)
     if sites:
         links = search_multiple_sites_for_links(topic, sites, max_results_total=max_results)
     else:
         links = search_topic_for_links(topic, max_results=max_results, restrict_to_site=restrict_to_site)
 
-    return build_newsletter_section(section_title, links)
+    return build_newsletter_section(section_title, links, start_date=start_date,
+                                    end_date=end_date, include_undated=include_undated)
 
 
 # --- RSS feed discovery ---
@@ -536,18 +543,21 @@ def fetch_rss_entries(feed_urls, limit_per_feed=10):
                 "title": entry.get("title", "No title"),
                 "link": link,
                 "description": description,
+                "published_date": publication_date(entry.get("published")),
                 "source": _get_domain(link),
             })
 
     return results
 
 
-def build_newsletter_section_from_rss(section_title, feed_urls, limit_per_feed=10):
+def build_newsletter_section_from_rss(section_title, feed_urls, limit_per_feed=10,
+                                      start_date=None, end_date=None, include_undated=True):
     """
     Fetch articles from RSS feeds, then analyse/summarise each one - same
     pipeline as the other discovery methods, so results are consistent
     (relevance scoring, bilingual translation at final build, etc.).
     """
+    validate_range(start_date, end_date)
     rss_entries = fetch_rss_entries(feed_urls, limit_per_feed=limit_per_feed)
 
     if not rss_entries:
@@ -555,22 +565,33 @@ def build_newsletter_section_from_rss(section_title, feed_urls, limit_per_feed=1
 
     print(f"\n--- Processing section: {section_title} (from RSS) ---")
     entries = []
+    excluded = {"outside_range": 0, "unknown_date": 0}
 
     for rss_entry in rss_entries:
         url = rss_entry["link"]
+        published = publication_date(rss_entry.get("published_date"))
+        if published and exclusion_reason(published, start_date, end_date, include_undated):
+            excluded["outside_range"] += 1
+            continue
         try:
             print(f"Downloading: {url}")
             # Try to get the full article text for a better summary;
             # fall back to the RSS description if scraping fails (e.g.
             # the site blocks scrapers or is JS-heavy).
             try:
-                title, text, image_url = get_article_text(url, include_image=True)
+                title, text, image_url, article_date = get_article_text(url, include_image=True, include_date=True)
+                published = published or publication_date(article_date)
                 if not text or len(text) < 200:
                     raise ValueError("too little text extracted")
             except Exception:
                 image_url = ""
                 title = rss_entry["title"]
                 text = rss_entry["description"]
+
+            reason = exclusion_reason(published, start_date, end_date, include_undated)
+            if reason:
+                excluded[reason] += 1
+                continue
 
             if not text or len(text) < 50:
                 print(f"  Skipped (no usable content, even from RSS description): {url}")
@@ -587,6 +608,7 @@ def build_newsletter_section_from_rss(section_title, feed_urls, limit_per_feed=1
                 "title": title,
                 "summary": analysis["summary"],
                 "source_url": url,
+                "published_date": published.isoformat() if published else None,
                 "image_url": image_url,
                 "image_approved": False,
                 "relevance": analysis["relevance"],
@@ -598,10 +620,10 @@ def build_newsletter_section_from_rss(section_title, feed_urls, limit_per_feed=1
         except Exception as e:
             print(f"  Failed to process {url}: {e}")
 
-    return {"section_title": section_title, "entries": entries}
+    return {"section_title": section_title, "entries": entries, "date_excluded": excluded}
 
 
-def build_newsletter_section(section_title, links):
+def build_newsletter_section(section_title, links, start_date=None, end_date=None, include_undated=True):
     """Process a list of links into one newsletter section (e.g. 'Events').
 
     Any link that looks like a homepage/section page (e.g. https://yle.fi)
@@ -611,14 +633,21 @@ def build_newsletter_section(section_title, links):
     """
     print(f"\n--- Processing section: {section_title} ---")
 
+    validate_range(start_date, end_date)
     links = [ensure_scheme(link) for link in links if link.strip()]
     links = expand_homepage_links(links)
     entries = []
+    excluded = {"outside_range": 0, "unknown_date": 0}
 
     for url in links:
         try:
             print(f"Downloading: {url}")
-            title, text, image_url = get_article_text(url, include_image=True)
+            title, text, image_url, raw_date = get_article_text(url, include_image=True, include_date=True)
+            published = publication_date(raw_date)
+            reason = exclusion_reason(published, start_date, end_date, include_undated)
+            if reason:
+                excluded[reason] += 1
+                continue
 
             if not text or len(text) < 200:
                 print(f"  Skipped (too little text extracted): {url}")
@@ -635,6 +664,7 @@ def build_newsletter_section(section_title, links):
                 "title": title,
                 "summary": analysis["summary"],
                 "source_url": url,
+                "published_date": published.isoformat() if published else None,
                 "image_url": image_url,
                 "image_approved": False,
                 "relevance": analysis["relevance"],
@@ -646,7 +676,7 @@ def build_newsletter_section(section_title, links):
         except Exception as e:
             print(f"  Failed to process {url}: {e}")
 
-    return {"section_title": section_title, "entries": entries}
+    return {"section_title": section_title, "entries": entries, "date_excluded": excluded}
 
 
 def ask_ai_about_entries(question, all_entries):
