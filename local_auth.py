@@ -1,3 +1,4 @@
+
 """Local prototype authentication; account storage is configurable for deployment."""
 import argparse
 import getpass
@@ -94,7 +95,6 @@ def create_account_form(accounts, form_key, first=False):
         if error:
             st.error(error)
             return
-        # Re-read before writing to avoid overwriting an account created since render.
         latest = load_accounts()
         if latest and first:
             st.error('An account was already created. Refresh and sign in.')
@@ -111,6 +111,39 @@ def create_account_form(accounts, form_key, first=False):
         st.success('Account created. You can now sign in.' if first else f'Account created for {username}.')
         if first:
             st.rerun()
+
+
+def is_admin(username, accounts=None):
+    """For the existing account format, the first stored user is the administrator."""
+    if accounts is None:
+        accounts = load_accounts()
+    return bool(accounts) and username == next(iter(accounts))
+
+
+def render_account_management():
+    """Administrator-only account overview and creation page."""
+    accounts = load_accounts()
+    current_user = st.session_state.get('auth_user')
+    if not is_admin(current_user, accounts):
+        st.error('Only the administrator can manage accounts.')
+        st.stop()
+
+    st.markdown('<div class="brand-kicker">Suomen eOppimiskeskus ry / Administration</div>', unsafe_allow_html=True)
+    st.title('Manage accounts')
+    st.write('View everyone who can sign in and create accounts for colleagues.')
+    st.subheader(f'Accounts ({len(accounts)})')
+    st.dataframe(
+        [{'Username': username,
+          'Role': 'Administrator' if is_admin(username, accounts) else 'User',
+          'Current account': 'Yes' if username == current_user else ''}
+         for username in accounts],
+        hide_index=True,
+        use_container_width=True,
+    )
+    st.caption('The first account created is the administrator. Passwords are never displayed.')
+    st.divider()
+    st.subheader('Create a new account')
+    create_account_form(accounts, 'admin_page_create_user')
 
 
 def clear_session():
@@ -134,12 +167,10 @@ def require_login():
             with st.sidebar:
                 st.caption(f'Signed in as {user}')
                 st.button('Log out', on_click=clear_session)
-                # The first account is the local administrator. Existing CLI-created
-                # installations default to their first saved account as administrator.
-                if user == next(iter(accounts)):
-                    with st.expander('Manage accounts'):
-                        st.caption('Create sign-in accounts for your colleagues.')
-                        create_account_form(accounts, 'admin_create_user')
+                if is_admin(user, accounts):
+                    st.caption('Role: Administrator')
+                else:
+                    st.caption('Role: User')
             return
         clear_session()
 
@@ -171,7 +202,6 @@ def require_login():
             else:
                 username = username.strip()
                 encoded = accounts.get(username)
-                # Equal-cost work for unknown accounts as well.
                 candidate = encoded or f'pbkdf2_sha256${ITERATIONS}${"00" * 16}${"00" * 32}'
                 if verify_password(password, candidate) and encoded:
                     clear_session()

@@ -1,3 +1,4 @@
+
 """
 Streamlit UI for the Newsletter Draft Generator
 --------------------------------------------------
@@ -24,7 +25,7 @@ from newsletter_design import safe_url
 from copy import deepcopy
 
 import streamlit as st
-from local_auth import require_login
+from local_auth import require_login, is_admin, render_account_management, load_accounts
 from app_style import apply_style, workspace_header
 
 from newsletter_generator import (
@@ -168,6 +169,16 @@ def source_input(label, key_prefix, date_options=None):
 st.set_page_config(page_title="Newsletter Draft Generator", layout="wide")
 apply_style()
 require_login()
+
+with st.sidebar:
+    if is_admin(st.session_state.get('auth_user'), load_accounts()):
+        page = st.radio('Pages', ['Newsletter', 'Manage accounts'], key='main_page')
+    else:
+        page = 'Newsletter'
+
+if page == 'Manage accounts':
+    render_account_management()
+    st.stop()
 
 render_sidebar()
 
