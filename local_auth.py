@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import secrets
 import time
+from urllib.parse import urlparse
 
 import streamlit as st
 from app_style import login_brand
@@ -48,6 +49,70 @@ def load_accounts():
     return accounts
 
 
+def save_accounts(accounts):
+    """Persist password hashes in the existing private local account store."""
+    path = accounts_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix('.tmp')
+    fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, 'w', encoding='utf-8') as file:
+        json.dump(accounts, file, indent=2)
+    temporary.replace(path)
+    path.chmod(0o600)
+
+
+def local_setup_allowed():
+    """Do not expose unauthenticated first-user signup on a public deployment."""
+    try:
+        host = (urlparse(st.context.url).hostname or '').lower()
+        return host in ('localhost', '127.0.0.1', '::1')
+    except (AttributeError, ValueError):
+        return False
+
+
+def valid_new_user(username, password, confirmation, accounts):
+    if not username or len(username) > 40 or not all(c.isalnum() or c in '_-' for c in username):
+        return 'Use a username of 1–40 letters, numbers, underscores or hyphens.'
+    if username in accounts:
+        return 'This username already exists.'
+    if len(password) < 12:
+        return 'Password must be at least 12 characters.'
+    if password != confirmation:
+        return 'Passwords do not match.'
+    return None
+
+
+def create_account_form(accounts, form_key, first=False):
+    with st.form(form_key, clear_on_submit=True):
+        username = st.text_input('New username', key=f'{form_key}_username')
+        password = st.text_input('New password (12+ characters)', type='password', key=f'{form_key}_password')
+        confirmation = st.text_input('Confirm password', type='password', key=f'{form_key}_confirm')
+        submitted = st.form_submit_button('Create account', type='primary')
+    if submitted:
+        username = username.strip()
+        error = valid_new_user(username, password, confirmation, accounts)
+        if error:
+            st.error(error)
+            return
+        # Re-read before writing to avoid overwriting an account created since render.
+        latest = load_accounts()
+        if latest and first:
+            st.error('An account was already created. Refresh and sign in.')
+            return
+        if username in latest:
+            st.error('This username already exists.')
+            return
+        latest[username] = hash_password(password)
+        try:
+            save_accounts(latest)
+        except OSError:
+            st.error('Could not save the account. Check folder permissions.')
+            return
+        st.success('Account created. You can now sign in.' if first else f'Account created for {username}.')
+        if first:
+            st.rerun()
+
+
 def clear_session():
     for key in list(st.session_state):
         del st.session_state[key]
@@ -69,6 +134,12 @@ def require_login():
             with st.sidebar:
                 st.caption(f'Signed in as {user}')
                 st.button('Log out', on_click=clear_session)
+                # The first account is the local administrator. Existing CLI-created
+                # installations default to their first saved account as administrator.
+                if user == next(iter(accounts)):
+                    with st.expander('Manage accounts'):
+                        st.caption('Create sign-in accounts for your colleagues.')
+                        create_account_form(accounts, 'admin_create_user')
             return
         clear_session()
 
@@ -83,9 +154,11 @@ def require_login():
         st.title('Welcome back')
         st.write('Sign in to bring your next issue to life.')
         if not accounts:
-            st.info('Create your first local account in the terminal, then refresh this page.')
-            st.code('.venv/bin/python local_auth.py add-user YOUR_USERNAME', language='bash')
-            st.caption('The terminal will ask for a password without displaying it.')
+            if local_setup_allowed():
+                st.info('First time here? Create your administrator account below.')
+                create_account_form(accounts, 'initial_setup', first=True)
+            else:
+                st.warning('Initial account setup is available only on localhost. Set up the first account locally before deploying this app.')
             st.stop()
         with st.form('login', clear_on_submit=True):
             username = st.text_input('Username', key='login_username')
@@ -133,14 +206,7 @@ def main():
     if password != getpass.getpass('Confirm password: '):
         parser.error('Passwords do not match')
     accounts[username] = hash_password(password)
-    path = accounts_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix('.tmp')
-    fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, 'w', encoding='utf-8') as file:
-        json.dump(accounts, file, indent=2)
-    temporary.replace(path)
-    path.chmod(0o600)
+    save_accounts(accounts)
     print(f'Account created for {username}. Refresh the app to sign in.')
 
 
