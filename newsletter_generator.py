@@ -15,7 +15,8 @@ Run locally (requires Ollama running: `ollama serve` in a separate terminal):
 """
 
 import json
-from publication_dates import publication_date, exclusion_reason, validate_range
+from publication_dates import (publication_date, exclusion_reason, validate_range,
+                               extract_publication_date, date_evidence, combine_evidence)
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -195,7 +196,7 @@ def get_article_text(url, include_image=False, include_date=False):
     if include_image:
         result += (article.top_image or "",)
     if include_date:
-        result += (publication_date(article.publish_date),)
+        result += (extract_publication_date(article.html, article.publish_date),)
     return result
 
 
@@ -530,13 +531,39 @@ def build_newsletter_section_from_topic(section_title, topic, max_results=5,
     (a list of domains to search across, e.g. the client's trusted list).
     """
     validate_range(start_date, end_date)
-    if sites:
-        links = search_multiple_sites_for_links(topic, sites, max_results_total=max_results)
-    else:
-        links = search_topic_for_links(topic, max_results=max_results, restrict_to_site=restrict_to_site)
-
-    return build_newsletter_section(section_title, links, start_date=start_date,
-                                    end_date=end_date, include_undated=include_undated)
+    result = {"section_title": section_title, "entries": [],
+              "date_excluded": {"outside_range": 0, "unknown_date": 0},
+              "collection_results": [], "requested_count": max_results}
+    seen = set()
+    # Widen discovery only when a batch cannot fill the requested draft count.
+    # A finite budget prevents inaccessible sites or an unavailable AI from looping forever.
+    for round_index in range(3):
+        candidate_limit = max_results * 4 * (round_index + 1)
+        query = topic if round_index < 2 else f"{topic} news articles"
+        if sites:
+            links = search_multiple_sites_for_links(query, sites, max_results_total=candidate_limit)
+        else:
+            links = search_topic_for_links(query, max_results=candidate_limit,
+                                           restrict_to_site=restrict_to_site)
+        fresh = []
+        for link in links:
+            key = link.split("#", 1)[0].rstrip("/")
+            if key not in seen:
+                seen.add(key)
+                fresh.append(link)
+        if not fresh:
+            continue
+        batch = build_newsletter_section(section_title, fresh, start_date=start_date,
+                    end_date=end_date, include_undated=include_undated,
+                    max_entries=max_results - len(result["entries"]))
+        result["entries"].extend(batch["entries"])
+        result["collection_results"].extend(batch.get("collection_results", []))
+        for reason, count in batch.get("date_excluded", {}).items():
+            result["date_excluded"][reason] += count
+        if len(result["entries"]) >= max_results:
+            break
+    result["target_met"] = len(result["entries"]) >= max_results
+    return result
 
 
 # --- RSS feed discovery ---
@@ -605,11 +632,17 @@ def build_newsletter_section_from_rss(section_title, feed_urls, limit_per_feed=1
     print(f"\n--- Processing section: {section_title} (from RSS) ---")
     entries = []
     excluded = {"outside_range": 0, "unknown_date": 0}
+    collection_results = []
 
     for rss_entry in rss_entries:
         url = rss_entry["link"]
-        published = publication_date(rss_entry.get("published_date"))
+        outcome = {"URL": url, "Result": "Processing failed", "Published": "Unknown", "Date source": "Unknown"}
+        collection_results.append(outcome)
+        evidence = date_evidence(rss_entry.get("published_date"), "RSS publication date")
+        published = evidence["date"]
+        outcome.update({"Published": str(published or "Unknown"), "Date source": evidence["source"]})
         if published and exclusion_reason(published, start_date, end_date, include_undated):
+            outcome["Result"] = "Outside date range"
             excluded["outside_range"] += 1
             continue
         try:
@@ -619,7 +652,8 @@ def build_newsletter_section_from_rss(section_title, feed_urls, limit_per_feed=1
             # the site blocks scrapers or is JS-heavy).
             try:
                 title, text, image_url, article_date = get_article_text(url, include_image=True, include_date=True)
-                published = published or publication_date(article_date)
+                evidence = combine_evidence(evidence, article_date)
+                published = evidence["date"]
                 if not text or len(text) < 200:
                     raise ValueError("too little text extracted")
             except Exception:
@@ -627,12 +661,15 @@ def build_newsletter_section_from_rss(section_title, feed_urls, limit_per_feed=1
                 title = rss_entry["title"]
                 text = rss_entry["description"]
 
+            outcome.update({"Published": str(published or "Unknown"), "Date source": evidence["source"]})
             reason = exclusion_reason(published, start_date, end_date, include_undated)
             if reason:
+                outcome["Result"] = "Unknown publication date" if reason == "unknown_date" else "Outside date range"
                 excluded[reason] += 1
                 continue
 
             if not text or len(text) < 50:
+                outcome["Result"] = "Insufficient text"
                 print(f"  Skipped (no usable content, even from RSS description): {url}")
                 continue
 
@@ -640,14 +677,19 @@ def build_newsletter_section_from_rss(section_title, feed_urls, limit_per_feed=1
             analysis = analyze_and_summarise(title, text, source_label=rss_entry["source"])
 
             if not analysis["summary"]:
+                outcome["Result"] = "AI returned no summary"
                 print(f"  Skipped (AI analysis failed): {url}")
                 continue
 
+            outcome["Result"] = "Summary created"
             entries.append({
                 "title": title,
                 "summary": analysis["summary"],
                 "source_url": url,
                 "published_date": published.isoformat() if published else None,
+                "date_source": evidence["source"],
+                "date_conflict": evidence["conflict"],
+                "date_candidates": evidence["candidates"],
                 "image_url": image_url,
                 "image_approved": False,
                 "relevance": analysis["relevance"],
@@ -659,10 +701,10 @@ def build_newsletter_section_from_rss(section_title, feed_urls, limit_per_feed=1
         except Exception as e:
             print(f"  Failed to process {url}: {e}")
 
-    return {"section_title": section_title, "entries": entries, "date_excluded": excluded}
+    return {"section_title": section_title, "entries": entries, "date_excluded": excluded, "collection_results": collection_results}
 
 
-def build_newsletter_section(section_title, links, start_date=None, end_date=None, include_undated=True):
+def build_newsletter_section(section_title, links, start_date=None, end_date=None, include_undated=True, max_entries=None):
     """Process a list of links into one newsletter section (e.g. 'Events').
 
     Any link that looks like a homepage/section page (e.g. https://yle.fi)
@@ -677,18 +719,27 @@ def build_newsletter_section(section_title, links, start_date=None, end_date=Non
     links = expand_homepage_links(links)
     entries = []
     excluded = {"outside_range": 0, "unknown_date": 0}
+    collection_results = []
 
     for url in links:
+        if max_entries is not None and len(entries) >= max_entries:
+            break
+        outcome = {"URL": url, "Result": "Processing failed", "Published": "Unknown", "Date source": "Unknown"}
+        collection_results.append(outcome)
         try:
             print(f"Downloading: {url}")
             title, text, image_url, raw_date = get_article_text(url, include_image=True, include_date=True)
-            published = publication_date(raw_date)
+            evidence = date_evidence(raw_date)
+            published = evidence["date"]
+            outcome.update({"Published": str(published or "Unknown"), "Date source": evidence["source"]})
             reason = exclusion_reason(published, start_date, end_date, include_undated)
             if reason:
+                outcome["Result"] = "Unknown publication date" if reason == "unknown_date" else "Outside date range"
                 excluded[reason] += 1
                 continue
 
             if not text or len(text) < 200:
+                outcome["Result"] = "Insufficient text"
                 print(f"  Skipped (too little text extracted): {url}")
                 continue
 
@@ -696,14 +747,19 @@ def build_newsletter_section(section_title, links, start_date=None, end_date=Non
             analysis = analyze_and_summarise(title, text, source_label=_get_domain(url))
 
             if not analysis["summary"]:
+                outcome["Result"] = "AI returned no summary"
                 print(f"  Skipped (AI analysis failed or returned no summary): {url}")
                 continue
 
+            outcome["Result"] = "Summary created"
             entries.append({
                 "title": title,
                 "summary": analysis["summary"],
                 "source_url": url,
                 "published_date": published.isoformat() if published else None,
+                "date_source": evidence["source"],
+                "date_conflict": evidence["conflict"],
+                "date_candidates": evidence["candidates"],
                 "image_url": image_url,
                 "image_approved": False,
                 "relevance": analysis["relevance"],
@@ -715,7 +771,7 @@ def build_newsletter_section(section_title, links, start_date=None, end_date=Non
         except Exception as e:
             print(f"  Failed to process {url}: {e}")
 
-    return {"section_title": section_title, "entries": entries, "date_excluded": excluded}
+    return {"section_title": section_title, "entries": entries, "date_excluded": excluded, "collection_results": collection_results}
 
 
 def ask_ai_about_entries(question, all_entries):

@@ -145,7 +145,8 @@ def source_input(label, key_prefix, date_options=None):
         )
 
         num_results = st.slider(
-            "Number of results to fetch",
+            "Number of articles wanted",
+            help="We check replacement links until this many summaries are ready or the search limit is reached.",
             min_value=1, max_value=10, value=5,
             key=f"{key_prefix}_num",
         )
@@ -243,18 +244,34 @@ if st.button("Generate Draft", type="primary", disabled=not date_valid):
     st.session_state.generated_sections = sections
     st.session_state.generated_date_options = dict(date_options)
 
-    total = sum(len(s["entries"]) for s in sections)
-    if total == 0:
-        st.error(
-            "No items were generated. This can happen if: Ollama isn't "
-            "running, the links/topic were empty, no articles matched the date settings, or - if you pasted a "
-            "site homepage - the site's article links couldn't be found "
-            "automatically (common on modern, JavaScript-heavy sites). "
-            "If a homepage link didn't work, try 'Search by topic' with "
-            "that site selected as a trusted source instead - it uses "
-            "search-engine indexing, which handles these sites better "
-            "than scanning the page's raw HTML."
-        )
+if st.session_state.generated_sections:
+    total = sum(len(section["entries"]) for section in st.session_state.generated_sections)
+    if not total:
+        st.warning("No draft articles were produced. See the collection results below for the reasons.")
+    with st.expander("Collection results", expanded=not total):
+        for section in st.session_state.generated_sections:
+            requested = section.get("requested_count")
+            if requested and len(section["entries"]) < requested:
+                st.warning(f"{section['section_title']}: found {len(section['entries'])} of {requested} requested articles. "
+                           "The search limit was reached before enough usable articles were found. "
+                           "Your source and publication-date requirements were kept. See the results below.")
+            if "collection_results" not in section and section["entries"]:
+                st.write(f"**{section['section_title']}** — {len(section['entries'])} summaries created.")
+                st.info("Collection details are unavailable for this draft. It may have been generated "
+                        "before the latest update. Restart the app and generate a new draft to use "
+                        "the updated collection logic and see its results.")
+                continue
+            results = section.get("collection_results", [])
+            st.write(f"**{section['section_title']}** — {len(results)} candidates checked; "
+                     f"{len(section['entries'])} summaries created.")
+            if results:
+                st.dataframe(results, hide_index=True, use_container_width=True)
+                if any(row["Result"] == "Unknown publication date" for row in results):
+                    st.info("Some publication dates could not be verified. You can include unknown dates "
+                            "to review those articles, but they may fall outside your selected range.")
+            else:
+                st.caption("No candidates reached processing. The section may have no input, "
+                           "or discovery returned no eligible links. Check the terminal for search or feed errors.")
 
 # --- REVIEW STEP ---
 if st.session_state.generated_sections:
@@ -317,6 +334,11 @@ if st.session_state.generated_sections:
                         st.caption("Topics: " + ", ".join(entry["topics"]))
 
                     st.caption("Published: " + (entry.get("published_date") or "Unknown — check the source"))
+                    if entry.get("published_date"):
+                        st.caption("Date source: " + entry.get("date_source", "Article extractor"))
+                    if entry.get("date_conflict"):
+                        candidates = "; ".join(f"{c['date']} ({c['source']})" for c in entry.get("date_candidates", []))
+                        st.warning("Conflicting publication dates — verify against the source. " + candidates)
                     st.caption(f"Source: {entry['source_url']}")
 
     st.divider()

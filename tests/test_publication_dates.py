@@ -61,10 +61,51 @@ class PublicationTests(TestCase):
 
     def test_topic_passes_date_options(self):
         with patch.object(g, 'search_topic_for_links', return_value=['https://example.org/article']), \
-             patch.object(g, 'build_newsletter_section', return_value={}) as build:
+             patch.object(g, 'build_newsletter_section', return_value={'entries': []}) as build:
             g.build_newsletter_section_from_topic('Events', 'education', start_date=START,
                                                   end_date=END, include_undated=False)
-        self.assertEqual(build.call_args.kwargs, dict(start_date=START, end_date=END, include_undated=False))
+        self.assertEqual(build.call_args.kwargs, dict(start_date=START, end_date=END, include_undated=False, max_entries=5))
+
+    def test_candidate_budget_and_skip_report(self):
+        links = [f'https://example.org/article/{i}' for i in range(4)]
+        articles = [('Title', 'text ' * 60, '', day) for day in (None, START, END)]
+        with patch.object(g, 'search_topic_for_links', return_value=links) as search, \
+             patch.object(g, 'get_article_text', side_effect=articles) as fetch, \
+             patch.object(g, 'analyze_and_summarise', return_value=ANALYSIS) as ai:
+            result = g.build_newsletter_section_from_topic('Highlights', 'education', max_results=2,
+                       start_date=START, end_date=END, include_undated=False)
+        self.assertEqual(search.call_args.kwargs['max_results'], 8)
+        self.assertEqual(fetch.call_count, 3)
+        self.assertEqual(ai.call_count, 2)
+        self.assertEqual([row['Result'] for row in result['collection_results']],
+                         ['Unknown publication date', 'Summary created', 'Summary created'])
+
+    def test_replacements_without_dates_reach_target(self):
+        links = [f'https://example.org/article/{i}' for i in range(10)]
+        articles = [('Title', 'text ' * 60, '', None) for _ in links]
+        articles[1] = ('Title', '', '', None)
+        articles[3] = ValueError('Download failed')
+        with patch.object(g, 'search_topic_for_links', side_effect=[links[:8], links]) as search, \
+             patch.object(g, 'get_article_text', side_effect=articles) as fetch, \
+             patch.object(g, 'analyze_and_summarise', return_value=ANALYSIS):
+            result = g.build_newsletter_section_from_topic('Highlights', 'education', max_results=8)
+        self.assertEqual(len(result['entries']), 8)
+        self.assertTrue(result['target_met'])
+        self.assertEqual(search.call_count, 2)
+        self.assertEqual(fetch.call_count, 10)
+        self.assertEqual(len({entry['source_url'] for entry in result['entries']}), 8)
+
+    def test_exhaustion_keeps_strict_dates_and_does_not_retry_duplicates(self):
+        with patch.object(g, 'search_topic_for_links', return_value=['https://example.org/article']), \
+             patch.object(g, 'get_article_text', return_value=('Title', 'text ' * 60, '', None)) as fetch, \
+             patch.object(g, 'analyze_and_summarise') as ai:
+            result = g.build_newsletter_section_from_topic('Highlights', 'education', max_results=8,
+                         start_date=START, end_date=END, include_undated=False)
+        self.assertEqual(result['entries'], [])
+        self.assertFalse(result['target_met'])
+        self.assertEqual(result['requested_count'], 8)
+        self.assertEqual(fetch.call_count, 1)
+        ai.assert_not_called()
 
     def test_calendar_validation_and_changed_settings(self):
         with patch('local_auth.require_login'), patch.object(g, 'build_newsletter_section',
