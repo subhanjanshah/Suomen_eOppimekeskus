@@ -216,13 +216,14 @@ if filter_dates:
     st.caption("Both dates are included. This checks article publication dates, not event dates. "
                "Filtering happens before AI analysis; search results and feeds may not contain every article in the range.")
 
-col1, col2 = st.columns(2)
+events_tab, highlights_tab = st.tabs(["Events", "Field Highlights"])
+st.caption("Set up each section in its tab. Generate Draft collects both sections into one newsletter.")
 
-with col1:
+with events_tab:
     st.subheader("Events")
     events_builder = source_input("Events", "events", date_options)
 
-with col2:
+with highlights_tab:
     st.subheader("Field Highlights")
     highlights_builder = source_input("Field Highlights", "highlights", date_options)
 
