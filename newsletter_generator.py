@@ -8,7 +8,7 @@ Matches the client's (Finnish e-learning association) actual workflow:
   - This script automates the "summarize" step: give it a list of links,
     it produces a short, original summary for each (not a copy of the source),
     plus the source link, organized by section (Events / Field Highlights)
-  - Uses qwen2.5:7b via Ollama, running fully locally -> no per-request cost
+  - Uses qwen3:8b via Ollama, running fully locally -> no per-request cost
 
 Run locally (requires Ollama running: `ollama serve` in a separate terminal):
     python3 newsletter_generator.py
@@ -27,7 +27,7 @@ from ddgs import DDGS
 
 OLLAMA_CHAT_URL = "http://localhost:11434/api/chat"
 OLLAMA_GENERATE_URL = "http://localhost:11434/api/generate"
-MODEL = "qwen2.5:7b"
+MODEL = "qwen3:8b"
 
 # Kept for compatibility with earlier code that imports OLLAMA_URL directly.
 OLLAMA_URL = OLLAMA_CHAT_URL
@@ -83,7 +83,7 @@ CLIENT_TRUSTED_SOURCES = {
     "EDEN - European Distance & E-Learning Network": "eden-europe.eu",
     "ICDE - International Council for Open & Distance Education": "icde.org",
     "ALT - UK Association for Learning Technology": "alt.ac.uk",
-    "Fleksibel Utdanning Norge (Norwegian, needs translation)": "fleksibelutdanning.no",
+    "Fleksibel Utdanning Norge (Norwegian-language source)": "fleksibelutdanning.no",
     "Gartner - Learning & Development": "gartner.com",
 }
 
@@ -145,9 +145,7 @@ def clear_used_links():
 # - "in your own words" -> avoids copying source text directly (copyright)
 # - "only use facts explicitly stated" -> reduces hallucination risk
 # - short length -> keeps it a newsletter blurb, not a reproduction
-# - explicit "in English" -> keeps the base summary language consistent
-#   regardless of source article language, so translation to Finnish
-#   (for the bilingual toggle) always translates FROM a known language.
+# - explicit "in English" -> keeps summaries consistent across source languages.
 SUMMARY_INSTRUCTION = (
     "Write a substantial but concise 4-6 sentence newsletter summary in English "
     "for Finnish educators, digital-learning professionals, and education organisations. "
@@ -162,30 +160,6 @@ SUMMARY_INSTRUCTION = (
     "If the source lacks enough information, write a shorter factual summary "
     "rather than padding it."
 )
-
-TRANSLATE_INSTRUCTION = (
-    "Translate the following newsletter title and summary into fluent, idiomatic "
-    "Finnish for education and digital-learning professionals. Preserve ALL "
-    "supported facts, specifics, dates, names, numerical values, qualifications "
-    "and the original level of certainty. Keep the summary's full informative "
-    "detail and roughly the same length; do not shorten it, add new claims, "
-    "or translate organisation or product names unnecessarily. "
-    "Use clear, professional newsletter Finnish, natural Finnish sentence "
-    "structures, and established educational terminology; avoid literal "
-    "English phrasing, marketing language and repetitive expressions. "
-    "Respond in exactly this format, with nothing else before or after:\n"
-    "TITLE_FI: <translated title>\n"
-    "SUMMARY_FI: <translated summary>"
-)
-
-# Static translations for the section labels used in the app (Events /
-# Field Highlights). If your team adds new section names, add their
-# Finnish equivalent here too - otherwise the English name is reused.
-SECTION_TITLE_FI = {
-    "Events": "Tapahtumat",
-    "Field Highlights": "Alan kohokohdat",
-}
-
 
 def get_article_text(url, include_image=False, include_date=False):
     """Download and extract the readable text of an article from a URL."""
@@ -305,6 +279,14 @@ SCORING GUIDANCE:
   useful, timely developments; 5 only for exceptional significance or value.
 - Give a specific, evidence-based reason for the score in one sentence.
 
+ENGLISH NEWSLETTER HEADLINE:
+- Create a concise, accurate, natural ENGLISH headline from the article.
+- If the source title is Finnish or another language, render its meaning in English.
+- If it is already English, improve clarity only where appropriate.
+- Keep official names, dates and facts accurate. Do not invent information.
+- Do not include Chinese characters or untranslated Finnish words unless they
+  are official proper names or essential Finnish terms.
+
 SUMMARY — THIS IS THE MAIN DELIVERABLE:
 - Write a polished, informative 4-6 sentence summary in ENGLISH, generally
   around 90-140 words when the source has enough substantive detail.
@@ -329,6 +311,7 @@ TOPICS:
 
 Return ONLY valid JSON, with exactly these keys and nothing else:
 {{
+  "title_en": "A factual, concise English headline for this article.",
   "relevance": 3,
   "reason": "Specific one-sentence explanation grounded in the article.",
   "summary": "A well-developed, original-wording newsletter paragraph in English.",
@@ -346,7 +329,7 @@ def analyze_and_summarise(title, text, source_label=""):
     Uses Ollama's /api/generate with format="json" and temperature=0,
     which is more reliable/parseable than free-form chat output.
 
-    Returns a dict: {relevance, reason, summary, topics}. Falls back to
+    Returns a dict: {title_en, relevance, reason, summary, topics}. Falls back to
     a safe default (relevance=0) if the call or parsing fails, so a
     single bad article never crashes the whole batch.
     """
@@ -368,6 +351,7 @@ def analyze_and_summarise(title, text, source_label=""):
                 "prompt": prompt,
                 "stream": False,
                 "format": "json",
+                "think": False,
                 "options": {"temperature": 0},
             },
             timeout=120,
@@ -377,6 +361,7 @@ def analyze_and_summarise(title, text, source_label=""):
         analysis = json.loads(raw)
 
         return {
+            "title_en": str(analysis.get("title_en") or "").strip(),
             "relevance": int(analysis.get("relevance", 0) or 0),
             "reason": analysis.get("reason", ""),
             "summary": analysis.get("summary", ""),
@@ -395,42 +380,6 @@ def analyze_and_summarise(title, text, source_label=""):
         print(f"  Unexpected error during analysis: {e}")
         return {"relevance": 0, "reason": "Unexpected error during analysis.",
                 "summary": "", "topics": []}
-
-
-def translate_to_finnish(title_en, summary_en):
-    """
-    Translate an English title + summary into Finnish, for the bilingual
-    newsletter toggle. Returns (title_fi, summary_fi). Falls back to the
-    English versions if translation fails or the response can't be parsed,
-    so the newsletter still works even if this step has an issue.
-    """
-    prompt = f"Title: {title_en}\n\nSummary: {summary_en}\n\n{TRANSLATE_INSTRUCTION}"
-
-    try:
-        response = requests.post(
-            OLLAMA_URL,
-            json={
-                "model": MODEL,
-                "messages": [{"role": "user", "content": prompt}],
-                "stream": False,
-            },
-            timeout=120,
-        )
-        response.raise_for_status()
-        raw = response.json()["message"]["content"].strip()
-
-        title_fi, summary_fi = title_en, summary_en
-        for line in raw.splitlines():
-            if line.strip().startswith("TITLE_FI:"):
-                title_fi = line.split(":", 1)[1].strip()
-            elif line.strip().startswith("SUMMARY_FI:"):
-                summary_fi = line.split(":", 1)[1].strip()
-
-        return title_fi, summary_fi
-
-    except Exception as e:
-        print(f"  Translation to Finnish failed, using English as fallback: {e}")
-        return title_en, summary_en
 
 
 def search_topic_for_links(topic, max_results=5, avoid_repeats=True, restrict_to_site=None):
@@ -621,7 +570,7 @@ def build_newsletter_section_from_rss(section_title, feed_urls, limit_per_feed=1
     """
     Fetch articles from RSS feeds, then analyse/summarise each one - same
     pipeline as the other discovery methods, so results are consistent
-    (relevance scoring, bilingual translation at final build, etc.).
+    (relevance scoring, editorial review, etc.).
     """
     validate_range(start_date, end_date)
     rss_entries = fetch_rss_entries(feed_urls, limit_per_feed=limit_per_feed)
@@ -683,7 +632,8 @@ def build_newsletter_section_from_rss(section_title, feed_urls, limit_per_feed=1
 
             outcome["Result"] = "Summary created"
             entries.append({
-                "title": title,
+                "title": analysis.get("title_en") or title,
+                "original_title": title,
                 "summary": analysis["summary"],
                 "source_url": url,
                 "published_date": published.isoformat() if published else None,
@@ -753,7 +703,8 @@ def build_newsletter_section(section_title, links, start_date=None, end_date=Non
 
             outcome["Result"] = "Summary created"
             entries.append({
-                "title": title,
+                "title": analysis.get("title_en") or title,
+                "original_title": title,
                 "summary": analysis["summary"],
                 "source_url": url,
                 "published_date": published.isoformat() if published else None,

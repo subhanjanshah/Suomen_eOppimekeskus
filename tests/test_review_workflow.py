@@ -41,8 +41,7 @@ class ReviewWorkflowTests(unittest.TestCase):
                 title='Rejected article', summary='Not selected', source_url='https://example.org/rejected',
                 relevance=2, reason='Weak connection', topics=[])] if label == 'Events' else []}
         with patch('local_auth.require_login'), \
-             patch.object(generator, 'build_newsletter_section', side_effect=build), \
-             patch.object(generator, 'translate_to_finnish', return_value=('Otsikko', 'Yhteenveto')):
+             patch.object(generator, 'build_newsletter_section', side_effect=build):
             app = AppTest.from_file(str(ROOT / 'streamlit_app.py')).run()
             def button(label):
                 return next(b for b in app.button if b.label == label)
@@ -51,15 +50,12 @@ class ReviewWorkflowTests(unittest.TestCase):
             self.assertFalse(app.checkbox(key='approve_Events_0').value)
             self.assertTrue(button('Build Final Newsletter').disabled)
             app.checkbox(key='approve_Events_0').check().run()
-            button('Prepare Finnish translations').click().run()
-            self.assertTrue(button('Build Final Newsletter').disabled)
-            app.checkbox(key='fi_review_Events_0').check().run()
             button('Build Final Newsletter').click().run()
             self.assertFalse(app.exception)
             self.assertEqual(generator.load_used_links(), {'https://example.org/article'})
-            self.assertIn('Otsikko', app.session_state['final_html'])
+            self.assertIn('Article', app.session_state['final_html'])
             app.run()
-            self.assertIn('Otsikko', app.session_state['final_html'])
+            self.assertIn('Article', app.session_state['final_html'])
             app.text_input(key='image_url_Events_0').set_value('https://example.org/photo.jpg').run()
             self.assertNotIn('final_html', app.session_state.filtered_state)
             self.assertFalse(app.checkbox(key='image_ok_Events_0').value)
@@ -73,14 +69,10 @@ class ReviewWorkflowTests(unittest.TestCase):
             self.assertNotIn('final_html', app.session_state.filtered_state)
             button('Build Final Newsletter').click().run()
             self.assertIn('Oppiminen', app.session_state['final_html'])
-            app.text_area(key='fi_summary_Events_0').set_value('Edited Finnish').run()
-            self.assertFalse(app.checkbox(key='fi_review_Events_0').value)
-            self.assertTrue(button('Build Final Newsletter').disabled)
-            self.assertNotIn('final_html', app.session_state.filtered_state)
             app.text_area(key='summary_Events_0').set_value('Changed English').run()
-            self.assertTrue(button('Build Final Newsletter').disabled)
-            button('Prepare Finnish translations').click().run()
-            self.assertFalse(app.checkbox(key='fi_review_Events_0').value)
+            self.assertNotIn('final_html', app.session_state.filtered_state)
+            button('Build Final Newsletter').click().run()
+            self.assertIn('Changed English', app.session_state['final_html'])
             button('Generate Draft').click().run()
             self.assertFalse(app.exception)
             self.assertFalse(app.checkbox(key='approve_Events_0').value)

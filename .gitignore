@@ -4,3 +4,8 @@
 __pycache__/
 *.pyc
 .venv/
+*.pyc
+.venv/
+.env
+.streamlit/secrets.toml
+used_links.json

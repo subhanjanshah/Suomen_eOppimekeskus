@@ -99,11 +99,10 @@ The app opens at `http://localhost:8501`.
 1. Choose **Paste links** or **Search by topic** for each newsletter section
 2. Click **Generate Draft** — the AI downloads, filters, and summarises each source
 3. **Review** each item: edit its English summary and explicitly check **Include** for the articles you want
-4. Click **Prepare Finnish translations**, edit the Finnish titles and summaries, and confirm each Finnish review
-5. Click **Build Final Newsletter** to save the reviewed HTML and remember only the included source links
-6. Download and hand off for sending (e.g. via Mailchimp)
+4. Click **Build Final Newsletter** to save the reviewed HTML and remember only the included source links
+5. Download and hand off for sending (e.g. via Mailchimp)
 
-The preview and download remain available across interactions. Changing the title, selection, or article text requires rebuilding the export. English edits require preparing the affected translation again; Finnish edits require renewed review. A new batch clears previous edits, approvals, and AI answers.
+The preview and download remain available across interactions. Changing the title, selection, or article text requires rebuilding the export. Edits to selected articles require rebuilding the export. A new batch clears previous edits, approvals, and AI answers.
 
 Search memory records articles included in a final newsletter built through Streamlit. Collection, failed processing, and rejected articles do not add links. Existing history from older versions is preserved; it may include previously collected but unused links. Use **Clear search memory** if you want to reset that history. The command-line and Gradio interfaces produce drafts without marking links as used.
 
@@ -141,7 +140,7 @@ MIT — feel free to reuse or adapt.
 
 ### Editorial newsletter design
 
-The HTML export now has a forest-green cover, editable issue label and topic themes, a featured story, alternating image/text article rows, and compact event cards. Empty sections are hidden. The layout stacks on narrow screens and includes print styles with a break after the cover. English/Finnish switching remains available; custom cover themes and image credits are shared across languages.
+The HTML export now has a forest-green cover, editable issue label and topic themes, a featured story, alternating image/text article rows, and compact event cards. Empty sections are hidden. The layout stacks on narrow screens and includes print styles with a break after the cover. The export uses the reviewed English summaries without a translation step.
 
 After selecting articles, use **Newsletter design** to choose the featured story. Its approved image appears on the cover. Article extraction suggests a lead image when available; you can replace its URL or upload a PNG, JPEG, or WebP image. Add a credit and description, then explicitly include the image after checking reuse permission. Uploaded images are resized and embedded in the HTML; URL images require an internet connection and may become unavailable. Articles without images use a text layout.
 

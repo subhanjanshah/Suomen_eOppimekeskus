@@ -80,7 +80,7 @@ Check that the Python version shown is at least 3.12. Replace `editor` with your
 
 Open [http://localhost:8501](http://localhost:8501) and sign in with the account you created. Keep the terminal open while using the app.
 
-For a first test, paste one article link, generate a draft, select the article, prepare and review its Finnish translation, then build the newsletter. AI processing can take time; start with a small number of articles.
+For a first test, paste one article link, generate a draft, select and review the article, then build the newsletter. AI processing can take time; start with a small number of articles.
 
 ## Next time and shutting down
 

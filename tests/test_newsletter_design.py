@@ -17,7 +17,7 @@ class DesignTests(unittest.TestCase):
     def test_images_escaping_and_empty_sections(self):
         entry = dict(title='<script>bad</script>', summary='A & B', source_url='javascript:bad',
                      image_url='https://example.org/image.jpg', image_approved=False,
-                     topics=['Learning'], title_fi='Oppiminen')
+                     topics=['Learning'])
         sections = [dict(section_title='Events', entries=[]),
                     dict(section_title='Field Highlights', entries=[entry])]
         html = format_newsletter_html(sections)
@@ -25,7 +25,8 @@ class DesignTests(unittest.TestCase):
         self.assertNotIn('javascript:bad', html)
         self.assertNotIn('<img', html)
         self.assertNotIn('>Events<', html)
-        self.assertIn('Oppiminen', html)
+        self.assertIn('Learning', html)
+        self.assertNotIn('langToggleBtn', html)
         entry.update(image_approved=True, image_credit='Photo credit')
         html = format_newsletter_html(sections)
         self.assertEqual(html.count('<img'), 2)
@@ -38,7 +39,7 @@ class DesignTests(unittest.TestCase):
                         image_url='https://example.org/photo.jpg', image_approved=True) for i in range(4)]
         html = format_newsletter_html([dict(section_title='Field Highlights', entries=entries)],
                                      featured_url=entries[2]['source_url'], cover_topics=['AI', 'Education'])
-        self.assertEqual(html.count('Story 2</span>'), 2)  # English + Finnish fallback, one story
+        self.assertEqual(html.count('Story 2</h3>'), 1)  # Single-language output
         self.assertIn('story with-image reverse', html)
         self.assertIn('class="topic">AI', html)
 

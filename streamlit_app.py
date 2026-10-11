@@ -9,7 +9,7 @@ Workflow:
      and an editable summary box, so a human can correct/reject anything
      before it goes out (matches the client's requirement: AI gathers,
      human verifies, then it's sent)
-  4. Prepare and review Finnish translations, then build the newsletter
+  4. Build the newsletter from approved article titles and summaries
      -> only approved (and possibly edited)
      items are included in the final HTML draft
 
@@ -36,7 +36,6 @@ from newsletter_generator import (
     load_used_links,
     mark_links_as_used,
     clear_used_links,
-    translate_to_finnish,
     ask_ai_about_entries,
     CLIENT_TRUSTED_SOURCES,
     RSS_FEEDS,
@@ -233,7 +232,7 @@ if st.button("Generate Draft", type="primary", disabled=not date_valid):
 
     # Clear widget state before rendering a new batch, including empty batches.
     for key in list(st.session_state):
-        if key.startswith(("approve_", "summary_", "fi_title_", "fi_summary_", "fi_review_", "image_", "design_")):
+        if key.startswith(("approve_", "summary_", "image_", "design_")):
             del st.session_state[key]
     for key in ("ai_answer", "ask_ai_question", "final_html", "final_snapshot"):
         st.session_state.pop(key, None)
@@ -290,8 +289,8 @@ if st.session_state.generated_sections:
             st.caption(f"{section['section_title']}: excluded {excluded.get('outside_range', 0)} outside the date range "
                        f"and {excluded.get('unknown_date', 0)} with unknown publication dates.")
     st.markdown(
-        "Review the summaries and select the articles to include. Then prepare "
-        "and review their Finnish translations before building the newsletter."
+        "Review the titles and summaries, select the articles to include, "
+        "then build the newsletter."
     )
 
     for section in st.session_state.generated_sections:
@@ -364,7 +363,7 @@ if st.session_state.generated_sections:
         st.caption("Suggested themes: " + (", ".join(suggested_topics) or "Add your own below."))
         topic_text = st.text_input(
             "Cover themes (comma-separated; leave blank to use suggested themes)",
-            key="design_topics", help="Use Finnish, English, or bilingual labels. These appear in both language views.")
+            key="design_topics", help="These themes appear on the newsletter cover.")
         issue = st.text_input("Issue date or label", value=date.today().strftime("%m / %Y"), key="design_issue")
         design = dict(issue_label=issue, cover_topics=(
             [t.strip() for t in topic_text.split(",") if t.strip()][:4]
@@ -417,45 +416,8 @@ if st.session_state.generated_sections:
             st.warning("The cover currently has no image. Add or select a picture for the featured "
                        "story above and check ‘Include this image’ to show it on the cover.")
 
-    if st.button("Prepare Finnish translations", disabled=not selected):
-        with st.spinner("Preparing Finnish translations for review..."):
-            for entry in selected:
-                source = (entry["title"], entry["summary"])
-                # Preserve reviewed edits unless the English source changed.
-                if entry.get("translation_source") == source:
-                    continue
-                title_fi, summary_fi = translate_to_finnish(*source)
-                entry.update(title_fi=title_fi, summary_fi=summary_fi,
-                             translation_source=source)
-                st.session_state[f"fi_title_{entry['id']}"] = title_fi
-                st.session_state[f"fi_summary_{entry['id']}"] = summary_fi
-                st.session_state[f"fi_review_{entry['id']}"] = False
-
-    def reset_finnish_review(entry_id):
-        st.session_state[f"fi_review_{entry_id}"] = False
-
+    # Approved original-language content is ready for export; no translation step.
     ready = bool(selected)
-    for entry in selected:
-        source = (entry["title"], entry["summary"])
-        if entry.get("translation_source") != source:
-            st.info(f"Prepare Finnish translation for: {entry['title']}")
-            ready = False
-            continue
-        with st.container(border=True):
-            st.subheader("Finnish review: " + entry["title"])
-            if (entry["title_fi"], entry["summary_fi"]) == source:
-                st.warning("Translation may have fallen back to the original text. "
-                           "Check and correct the Finnish text before approving.")
-            entry["title_fi"] = st.text_input(
-                "Finnish title", key=f"fi_title_{entry['id']}",
-                on_change=reset_finnish_review, args=(entry["id"],))
-            entry["summary_fi"] = st.text_area(
-                "Finnish summary", key=f"fi_summary_{entry['id']}",
-                on_change=reset_finnish_review, args=(entry["id"],))
-            reviewed = st.checkbox("I have reviewed the Finnish title and summary",
-                                   key=f"fi_review_{entry['id']}")
-            if not reviewed or not entry["title_fi"].strip() or not entry["summary_fi"].strip():
-                ready = False
 
     # A saved export must match the current selection, title, and edits.
     snapshot = {"title": newsletter_title, "sections": final_sections, "design": design}
