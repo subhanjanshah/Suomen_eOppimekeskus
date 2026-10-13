@@ -18,6 +18,8 @@ Run locally (requires Ollama running: `ollama serve` in a separate terminal):
 """
 
 import base64
+import html
+from urllib.parse import urlparse
 from datetime import date, timedelta
 from io import BytesIO
 from PIL import Image
@@ -43,19 +45,30 @@ from newsletter_generator import (
 
 def render_sidebar():
     with st.sidebar:
-        st.subheader("Search memory")
+        st.markdown('<div class="memory-heading">RECENTLY USED LINKS</div>', unsafe_allow_html=True)
         used = load_used_links()
-        st.caption(
-            f"{len(used)} link(s) remembered as already used. "
-            "Search-by-topic will skip these automatically."
-        )
+        st.caption(f"{len(used)} saved links · Previously used articles are skipped during topic searches.")
         if used:
-            with st.expander("View remembered links"):
-                for u in sorted(used):
-                    st.write(u)
-        if st.button("Clear search memory"):
+            with st.expander(f"Past links ({len(used)})", expanded=False):
+                st.markdown('<div class="past-links-heading">Previously included sources</div>', unsafe_allow_html=True)
+                for url in sorted(used):
+                    # Only make safe web URLs clickable; escape every user-supplied value.
+                    parsed = urlparse(url)
+                    if parsed.scheme in ("http", "https") and parsed.netloc:
+                        label = html.escape(parsed.netloc.removeprefix("www."))
+                        href = html.escape(url, quote=True)
+                        st.markdown(
+                            f'<a class="past-link" href="{href}" target="_blank" rel="noopener noreferrer">'
+                            f'<span class="past-link-domain">↗ {label}</span>'
+                            f'<span class="past-link-url">{html.escape(url)}</span></a>',
+                            unsafe_allow_html=True,
+                        )
+                    else:
+                        st.code(url)
+        if st.button("Clear link history", key="clear_link_history", use_container_width=True,
+                     help="Allow previously used articles to appear in future searches."):
             clear_used_links()
-            st.success("Cleared. Next search will not skip any links.")
+            st.success("History cleared.")
             st.rerun()
 
 
@@ -166,20 +179,34 @@ def source_input(label, key_prefix, date_options=None):
 
 
 st.set_page_config(page_title="Newsletter Draft Generator", layout="wide")
-apply_style()
+# The theme is kept in the user's Streamlit session; no browser setting is required.
+if "dark_mode" not in st.session_state:
+    st.session_state.dark_mode = False
+apply_style(dark=st.session_state.dark_mode)
 require_login()
 
 with st.sidebar:
-    if is_admin(st.session_state.get('auth_user'), load_accounts()):
-        page = st.radio('Pages', ['Newsletter', 'Manage accounts'], key='main_page')
+    st.markdown('<div class="sidebar-app-title">eOppimisRadar</div>'
+                '<div class="sidebar-app-subtitle">Editorial workspace</div>', unsafe_allow_html=True)
+    if is_admin(st.session_state.get("auth_user"), load_accounts()):
+        page = st.radio("Workspace", ["Newsletter Generator", "Manage Accounts"],
+                        key="main_page", label_visibility="collapsed")
     else:
-        page = 'Newsletter'
+        page = "Newsletter Generator"
+        st.markdown('<div class="sidebar-only-page">▣ &nbsp; Newsletter Generator</div>',
+                    unsafe_allow_html=True)
 
-if page == 'Manage accounts':
+# Show history on both pages, with the appearance control anchored at the sidebar bottom.
+render_sidebar()
+with st.sidebar:
+    st.container(key="sidebar_bottom_spacer")
+    with st.container(key="theme_toggle_panel"):
+        st.toggle("🌙 Dark mode" if not st.session_state.dark_mode else "☀️ Light mode",
+                  key="dark_mode", help="Switch the appearance of this workspace")
+
+if page == "Manage Accounts":
     render_account_management()
     st.stop()
-
-render_sidebar()
 
 workspace_header()
 
