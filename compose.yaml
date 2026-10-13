@@ -1,0 +1,18 @@
+name: newsletter
+
+services:
+  newsletter:
+    build:
+      context: .
+    image: newsletter-app:local
+    init: true
+    ports:
+      - "127.0.0.1:8501:8501"
+    volumes:
+      - ollama_models:/models
+      - newsletter_data:/data
+    stop_grace_period: 30s
+
+volumes:
+  ollama_models:
+  newsletter_data:
