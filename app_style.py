@@ -2,7 +2,7 @@
 import streamlit as st
 
 
-def apply_style():
+def apply_style(dark=False):
     st.markdown('''<style>
 /* Set our palette explicitly as well as in config.toml, including dark-mode browsers. */
 :root {color-scheme:light;}
@@ -48,6 +48,88 @@ def apply_style():
 [data-testid="stApp"] [data-testid="stBaseButton-primaryFormSubmit"] [data-testid="stMarkdownContainer"] p {color:#fff!important;}
 @media(max-width:700px){[data-testid="stMainBlockContainer"]{padding:2rem 1rem;}.st-key-login_shell{margin:0 auto;}.st-key-login_shell [data-testid="stHorizontalBlock"]{flex-direction:column;}.st-key-login_shell [data-testid="stColumn"]{width:100%!important;flex:1 1 auto!important;}.login-brand{padding:30px;min-height:0;gap:26px;}.login-brand .brand-headline{font-size:34px;}.login-brand .brand-description,.login-brand .brand-footer{display:none;}.st-key-login_card{padding:28px;}.workflow-strip{grid-template-columns:repeat(2,1fr);}}
 </style>''', unsafe_allow_html=True)
+
+    # Theme-specific overrides also style native Streamlit controls, not only headings.
+    palette = (
+        {"bg": "#181d1a", "side": "#202822", "surface": "#252e28", "field": "#2b352e",
+         "text": "#e9ede6", "muted": "#adb9ad", "border": "#3e4b40", "accent": "#a8c7aa",
+         "accent_text": "#17251a", "hover": "#303d33", "card": "#252e28"}
+        if dark else
+        {"bg": "#f5f3ed", "side": "#e9eee5", "surface": "#ffffff", "field": "#ffffff",
+         "text": "#203d35", "muted": "#637369", "border": "#d8e0d4", "accent": "#24634f",
+         "accent_text": "#ffffff", "hover": "#e1e9dd", "card": "#ffffff"}
+    )
+    css = """
+    <style>
+    :root { color-scheme: THEME_SCHEME; }
+    [data-testid="stApp"], [data-testid="stAppViewContainer"] {background: BG!important;color: TEXT!important;}
+    [data-testid="stSidebar"], [data-testid="stSidebarContent"] {background: SIDE!important;color: TEXT!important;}
+    [data-testid="stSidebar"] {border-right:1px solid BORDER!important;}
+    [data-testid="stApp"] h1,[data-testid="stApp"] h2,[data-testid="stApp"] h3,
+    [data-testid="stApp"] p,[data-testid="stApp"] label,
+    [data-testid="stApp"] [data-testid="stWidgetLabel"] p,
+    [data-testid="stSidebar"] p {color:TEXT;}
+    [data-testid="stApp"] [data-testid="stCaptionContainer"],
+    [data-testid="stSidebar"] [data-testid="stCaptionContainer"],
+    .workspace-intro {color:MUTED!important;}
+    [data-testid="stApp"] [data-testid="stTextInput"] input,
+    [data-testid="stApp"] [data-testid="stTextArea"] textarea,
+    [data-testid="stApp"] [data-baseweb="select"] > div,
+    [data-testid="stApp"] [data-baseweb="input"],
+    [data-testid="stApp"] [data-baseweb="textarea"] {background:FIELD!important;color:TEXT!important;border-color:BORDER!important;}
+    [data-testid="stApp"] input::placeholder,[data-testid="stApp"] textarea::placeholder {color:MUTED!important;}
+    [data-testid="stApp"] button[kind="primary"],
+    [data-testid="stApp"] [data-testid="stBaseButton-primaryFormSubmit"] {background:ACCENT!important;border-color:ACCENT!important;color:ACCENT_TEXT!important;}
+    [data-testid="stApp"] button[kind="primary"] p,
+    [data-testid="stApp"] [data-testid="stBaseButton-primaryFormSubmit"] p {color:ACCENT_TEXT!important;}
+    [data-testid="stApp"] button[kind="secondary"] {background:SURFACE!important;border-color:BORDER!important;color:TEXT!important;}
+    [data-testid="stApp"] button[kind="secondary"] p {color:TEXT!important;}
+    [data-testid="stApp"] [data-testid="stVerticalBlockBorderWrapper"],
+    [data-testid="stApp"] [data-testid="stExpander"],
+    [data-testid="stApp"] [data-testid="stForm"] {border-color:BORDER!important;}
+    .workflow-strip a {background:CARD!important;border-color:BORDER!important;color:TEXT!important;}
+    .workflow-strip span,.brand-kicker {color:ACCENT!important;}
+    .st-key-login_shell {background:SURFACE!important;border-color:BORDER!important;}
+    .st-key-login_card {background:SURFACE!important;}
+    .st-key-login_shell [data-testid="stColumn"]:first-child {background:#173f35!important;}
+    .st-key-login_card [data-testid="stMarkdownContainer"] p {color:MUTED!important;}
+    .sidebar-app-title {font-weight:800;font-size:1.35rem;letter-spacing:-.04em;color:TEXT;margin:4px 0 0;}
+    .sidebar-app-subtitle {font-size:.76rem;color:MUTED;margin-bottom:18px;}
+    [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] {gap:3px;}
+    [data-testid="stSidebar"] [data-testid="stRadio"] label {padding:9px 11px;border:1px solid transparent;border-radius:8px;background:transparent;transition:background .15s,border-color .15s;}
+    [data-testid="stSidebar"] [data-testid="stRadio"] label:hover {background:HOVER;}
+    [data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) {background:HOVER;border-color:transparent;box-shadow:inset 3px 0 ACCENT;}
+    [data-testid="stSidebar"] [data-testid="stRadio"] label p {font-weight:650;color:TEXT!important;}
+    [data-testid="stSidebar"] [data-testid="stRadio"] label [data-testid="stMarkdownContainer"] {flex:1;}
+    .sidebar-only-page {padding:10px 12px;border-left:3px solid ACCENT;border-radius:7px;background:HOVER;color:TEXT;font-weight:650;}
+    .memory-heading {font-size:.68rem;letter-spacing:.09em;font-weight:700;color:MUTED;margin:16px 0 5px;}
+    .past-links-heading {display:none;}
+    .past-link {display:flex;flex-direction:column;gap:1px;background:transparent;border-bottom:1px solid BORDER;padding:7px 3px;margin:0;text-decoration:none!important;min-width:0;}
+    .past-link:hover {background:HOVER;}
+    .past-link-domain {font-size:.8rem;font-weight:600;color:TEXT;overflow-wrap:anywhere;}
+    .past-link-url {font-size:.67rem;color:MUTED;overflow-wrap:anywhere;line-height:1.25;max-height:1.25em;overflow:hidden;}
+    /* Stretch the actual Streamlit sidebar content column to viewport height.
+       The theme panel is pushed down with auto margin, while long history
+       remains scrollable. Streamlit uses nested vertical-block wrappers. */
+    [data-testid="stSidebarUserContent"] {min-height:calc(100dvh - 3rem);display:flex;flex-direction:column;}
+    [data-testid="stSidebarUserContent"] > [data-testid="stVerticalBlock"] {flex:1;display:flex;flex-direction:column;min-height:calc(100dvh - 3rem);}
+    [data-testid="stSidebarUserContent"] > [data-testid="stVerticalBlock"] > [data-testid="stVerticalBlockBorderWrapper"] {flex:1;display:flex;flex-direction:column;}
+    [data-testid="stSidebarUserContent"] > [data-testid="stVerticalBlock"] > [data-testid="stVerticalBlockBorderWrapper"] > [data-testid="stVerticalBlock"] {flex:1;display:flex;flex-direction:column;}
+    [data-testid="stSidebar"] .st-key-sidebar_bottom_spacer {flex:1 1 auto;min-height:32px;}
+    [data-testid="stSidebar"] .st-key-theme_toggle_panel {margin-top:auto;border-top:1px solid BORDER;padding:14px 2px 10px;background:SIDE;}
+    .st-key-theme_toggle_panel label p {font-weight:600!important;color:TEXT!important;}
+    /* Subtle panels instead of strongly outlined cards. */
+    [data-testid="stSidebar"] [data-testid="stExpander"] {background:transparent!important;border-color:BORDER!important;}
+    .workflow-strip {gap:8px;margin-bottom:22px;}
+    .workflow-strip a {padding:12px;border-radius:8px;font-weight:500;}
+    .sidebar-app-subtitle {margin-bottom:12px;}
+    
+    </style>
+    """
+    for key, value in palette.items():
+        css = css.replace(key.upper(), value)
+    css = css.replace("THEME_SCHEME", "dark" if dark else "light")
+    st.markdown(css, unsafe_allow_html=True)
 
 
 def login_brand():
