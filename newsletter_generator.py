@@ -725,53 +725,6 @@ def build_newsletter_section(section_title, links, start_date=None, end_date=Non
     return {"section_title": section_title, "entries": entries, "date_excluded": excluded, "collection_results": collection_results}
 
 
-def ask_ai_about_entries(question, all_entries):
-    """
-    Answer a free-form question about the currently gathered entries
-    (e.g. "what trends do you see?"). Keeps everything grounded in the
-    actual gathered data rather than letting the model invent things.
-    """
-    if not all_entries:
-        context = "No articles have been gathered yet."
-    else:
-        context_parts = []
-        for i, entry in enumerate(all_entries, start=1):
-            topics = ", ".join(entry.get("topics", []) or [])
-            context_parts.append(
-                f"Article {i}\n"
-                f"Title: {entry.get('title', '')}\n"
-                f"Relevance: {entry.get('relevance', '-')}/5\n"
-                f"Summary: {entry.get('summary', '')}\n"
-                f"Topics: {topics}\n"
-                f"Source: {entry.get('source_url', '')}"
-            )
-        context = "\n\n".join(context_parts)
-
-    prompt = (
-        "You are an assistant helping a newsletter editor understand the "
-        "articles they've gathered so far. Answer using ONLY the "
-        "information below - do not invent articles or facts that "
-        "aren't there. If you can't answer from this data, say so.\n\n"
-        f"GATHERED ARTICLES:\n{context}\n\n"
-        f"QUESTION: {question}"
-    )
-
-    try:
-        response = requests.post(
-            OLLAMA_CHAT_URL,
-            json={
-                "model": MODEL,
-                "messages": [{"role": "user", "content": prompt}],
-                "stream": False,
-            },
-            timeout=120,
-        )
-        response.raise_for_status()
-        return response.json()["message"]["content"].strip()
-    except Exception as e:
-        return f"Could not get an answer from the AI: {e}"
-
-
 def format_newsletter_markdown(sections):
     """Turn the processed sections into a readable draft, ready for human review."""
     lines = ["# Newsletter Draft (AI-generated - please review before sending)\n"]

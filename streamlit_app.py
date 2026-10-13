@@ -36,7 +36,6 @@ from newsletter_generator import (
     load_used_links,
     mark_links_as_used,
     clear_used_links,
-    ask_ai_about_entries,
     CLIENT_TRUSTED_SOURCES,
     RSS_FEEDS,
 )
@@ -234,7 +233,7 @@ if st.button("Generate Draft", type="primary", disabled=not date_valid):
     for key in list(st.session_state):
         if key.startswith(("approve_", "summary_", "image_", "design_")):
             del st.session_state[key]
-    for key in ("ai_answer", "ask_ai_question", "final_html", "final_snapshot"):
+    for key in ("final_html", "final_snapshot"):
         st.session_state.pop(key, None)
     for section in sections:
         for i, entry in enumerate(section["entries"]):
@@ -448,38 +447,3 @@ if st.session_state.generated_sections:
             label="Download final newsletter (HTML)",
             data=st.session_state.final_html, file_name="newsletter_draft.html",
             mime="text/html")
-
-# --- ASK AI ---
-if st.session_state.generated_sections:
-    st.divider()
-    st.header("Ask AI about the gathered articles")
-
-    all_entries = [
-        entry
-        for section in st.session_state.generated_sections
-        for entry in section["entries"]
-    ]
-
-    if all_entries:
-        st.caption(f"AI has access to {len(all_entries)} gathered article(s).")
-    else:
-        st.info("No articles gathered yet - generate a draft first.")
-
-    question = st.text_area(
-        "Your question",
-        placeholder="e.g. What trends do you see across these articles?",
-        height=90,
-        key="ask_ai_question",
-    )
-
-    if st.button("Ask AI"):
-        if not question.strip():
-            st.warning("Please enter a question.")
-        else:
-            with st.spinner("AI is thinking..."):
-                answer = ask_ai_about_entries(question, all_entries)
-            st.session_state["ai_answer"] = answer
-
-    if "ai_answer" in st.session_state:
-        st.subheader("AI response")
-        st.write(st.session_state["ai_answer"])
