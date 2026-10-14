@@ -6,6 +6,9 @@ services:
       context: .
     image: newsletter-app:local
     init: true
+    environment:
+      OLLAMA_MODEL: qwen3:4b
+      OLLAMA_TIMEOUT: "600"
     ports:
       - "127.0.0.1:8501:8501"
     volumes:

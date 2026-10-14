@@ -1,93 +1,35 @@
-# Newsletter prototype setup
+# eOppimisRadar setup guide
 
-Run the newsletter app locally on Windows or macOS. No paid AI account or API key is needed. Internet is needed for installation and collecting articles; Qwen runs on your computer.
+## Recommended: Windows client with Docker
 
-## 1. Install the tools
+1. Install **Docker Desktop** and start it. Allow Docker enough memory to run the local AI model.
+2. Download the project ZIP and extract it to a normal folder.
+3. Double-click **Start-eOppimisRadar.bat**. It starts the Docker container and opens your browser at `http://localhost:8501`.
+4. On first launch, Docker builds the image and automatically downloads **Qwen3:4b**. The first launch may take several minutes; if the browser opens early, wait and refresh.
+5. Create the first administrator account. Additional users can be created by the administrator.
+6. Review AI summaries before publication. Generation on CPU may take several minutes per article.
+7. Double-click **Stop-eOppimisRadar.bat** when finished.
 
-- Install **Python 3.12 or newer** from [python.org](https://www.python.org/downloads/). On Windows, select **Add Python to PATH** if the installer offers it.
-- Install **Ollama** for your operating system from [ollama.com/download](https://ollama.com/download), then open the Ollama app.
-- VS Code is optional. You can use its terminal or Windows PowerShell / macOS Terminal.
+**Important:** No separate Python, Ollama, GitHub, or VS Code installation is required. The client **does** need Docker Desktop. Model files and accounts are saved in Docker named volumes and survive normal starts/stops. Never use `docker compose down -v` unless you intentionally want to erase them. Do not distribute your own saved accounts or private newsletter data.
 
-Close and reopen your terminal after installation.
+## Troubleshooting
 
-## 2. Download the project
+- **Docker not running:** Open Docker Desktop, wait until the engine starts, then retry the launcher.
+- **Browser cannot connect:** First launch may still be downloading the model. Wait and refresh. For diagnostics use `docker compose logs --tail 80 newsletter`.
+- **AI is slow:** Qwen3:4b runs locally. CPU-only generation can take several minutes. The default request timeout is 600 seconds.
+- **Port 8501 already in use:** Stop other Streamlit apps or containers using that port.
+- **Preserve your account:** Use the Stop launcher or `docker compose down`, without `-v`.
 
-Open [the project repository](https://github.com/subhanjanshah/Suomen_eOppimekeskus), select **Code → Download ZIP**, and extract it. If it is private, sign in with a GitHub account that has repository access.
+## Developer commands (optional)
 
-Open the extracted folder in VS Code, then select **Terminal → New Terminal**. Make sure the terminal is in the folder containing `streamlit_app.py`, `local_auth.py`, and `.streamlit/config.toml`.
-
-Alternatively, open your normal terminal and navigate there:
-
-```text
-cd "PASTE THE FULL PATH TO THE EXTRACTED PROJECT FOLDER HERE"
-```
-
-Replace the example path with your actual folder path, keeping the quotes.
-
-## 3. Download the AI model
-
-Run these commands on either operating system:
-
-```bash
-ollama --version
-ollama pull qwen2.5:7b
-ollama list
-```
-
-The first download may take several minutes. Confirm `qwen2.5:7b` appears in the list; this is the model the current code uses.
-
-If Ollama reports that it cannot connect, open the Ollama application. Alternatively, run `ollama serve` in a separate terminal and leave it running. If it says the address is already in use, Ollama may already be running—do not start a second copy.
-
-## 4. Set up Python and create your login
-
-Run **only the block for your operating system**, from the project folder. Virtual-environment activation is not needed with these commands.
-
-**Windows — PowerShell:**
+From the extracted project folder:
 
 ```powershell
-py -3 --version
-py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install --upgrade pip
-.\.venv\Scripts\python.exe -m pip install streamlit==1.63.0 requests newspaper3k lxml_html_clean ddgs feedparser Pillow
-.\.venv\Scripts\python.exe local_auth.py add-user editor
+docker compose up --build -d
+docker compose logs --tail 80 newsletter
+docker compose down
 ```
 
-**macOS — Terminal:**
+The default model and AI request timeout are set in `compose.yaml` as `OLLAMA_MODEL: qwen3:4b` and `OLLAMA_TIMEOUT: "600"`. The shell startup script and Python generator both read these settings. To use a different model, update `OLLAMA_MODEL` and rebuild the container.
 
-```bash
-python3 --version
-python3 -m venv .venv
-.venv/bin/python -m pip install --upgrade pip
-.venv/bin/python -m pip install streamlit==1.63.0 requests newspaper3k lxml_html_clean ddgs feedparser Pillow
-.venv/bin/python local_auth.py add-user editor
-```
-
-Check that the Python version shown is at least 3.12. Replace `editor` with your preferred username if you want. Enter a password of **at least 12 characters**, then confirm it. Nothing appears while you type the password; this is normal. Create the account only once. Do not share or upload `.local/accounts.json`.
-
-## 5. Start the website
-
-**Windows:**
-
-```powershell
-.\.venv\Scripts\python.exe -m streamlit run streamlit_app.py --server.address 127.0.0.1
-```
-
-**macOS:**
-
-```bash
-.venv/bin/python -m streamlit run streamlit_app.py --server.address 127.0.0.1
-```
-
-Open [http://localhost:8501](http://localhost:8501) and sign in with the account you created. Keep the terminal open while using the app.
-
-For a first test, paste one article link, generate a draft, select and review the article, then build the newsletter. AI processing can take time; start with a small number of articles.
-
-## Next time and shutting down
-
-- **Next time:** open Ollama, open a terminal in the project folder, and run the Step 5 command. No reinstall or new account is needed.
-- **Stop the website:** press **Ctrl+C** in its terminal (also on Mac).
-- **Unload Qwen:** run `ollama stop qwen2.5:7b`. Quit Ollama too if you are finished using it.
-
-If a command is not found, reopen the terminal and check the corresponding installation. If `streamlit_app.py` cannot be found, the terminal is in the wrong folder. If an article produces no result, try a direct public article URL; some websites block extraction.
-
-These instructions match the current local Streamlit prototype. Streamlit 1.63.0 matches the development environment; a fresh Windows installation has not been tested here. Do not expose this local prototype directly to the public internet.
+For a manual non-Docker development setup, install Python 3.12+, Ollama, run `ollama pull qwen3:4b`, install packages with `pip install -r requirements.txt`, and start `python -m streamlit run streamlit_app.py`. This manual setup is not required for clients.

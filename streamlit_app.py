@@ -3,7 +3,7 @@
 Streamlit UI for the Newsletter Draft Generator
 --------------------------------------------------
 Workflow:
-  1. Paste links OR type a topic per section (Events / Field Highlights)
+  1. Paste links OR type a topic per section (News & Insights / Events)
   2. Click "Generate Draft" -> AI downloads + summarises each item
   3. REVIEW STEP: each item is shown individually with an Approve checkbox
      and an editable summary box, so a human can correct/reject anything
@@ -241,20 +241,25 @@ if filter_dates:
     st.caption("Both dates are included. This checks article publication dates, not event dates. "
                "Filtering happens before AI analysis; search results and feeds may not contain every article in the range.")
 
-events_tab, highlights_tab = st.tabs(["Events", "Field Highlights"])
+highlights_tab, events_tab = st.tabs(["News & Insights", "Events"])
 st.caption("Set up each section in its tab. Generate Draft collects both sections into one newsletter.")
+
+with highlights_tab:
+    st.subheader("News & Insights")
+    highlights_builder = source_input("News & Insights", "highlights", date_options)
 
 with events_tab:
     st.subheader("Events")
     events_builder = source_input("Events", "events", date_options)
 
-with highlights_tab:
-    st.subheader("Field Highlights")
-    highlights_builder = source_input("Field Highlights", "highlights", date_options)
-
 if st.button("Generate Draft", type="primary", disabled=not date_valid):
-    with st.spinner("Searching, downloading, and summarising... this can take a minute or two."):
-        sections = [events_builder(), highlights_builder()]
+    with st.status("Collecting and summarising articles (this can take several minutes)...", expanded=True) as progress:
+        st.write("Processing News & Insights...")
+        highlights_section = highlights_builder()
+        st.write("Processing Events...")
+        events_section = events_builder()
+        sections = [highlights_section, events_section]
+        progress.update(label="Draft collection finished", state="complete", expanded=False)
 
     # Clear widget state before rendering a new batch, including empty batches.
     for key in list(st.session_state):

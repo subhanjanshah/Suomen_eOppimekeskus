@@ -2,6 +2,19 @@
 
 A local, free, privacy-respecting tool that helps a small team turn scattered web content into a reviewable newsletter draft — built as part of a university Service Design / Design Thinking project.
 
+## Recommended Docker setup (Windows client)
+
+1. Install and start **Docker Desktop**. Docker must be running.
+2. Extract this project ZIP into a folder. Do not run the scripts from inside the ZIP.
+3. Double-click `Start-eOppimisRadar.bat` and open `http://localhost:8501`.
+4. On the first launch, Docker builds the application and downloads **Qwen3:4b** (about 2.5 GB). This requires internet access and may take several minutes. Refresh the page if it opens before Streamlit is ready.
+5. Create the first administrator account, then use the newsletter generator.
+6. Double-click `Stop-eOppimisRadar.bat` to stop the app. **Do not run `docker compose down -v`**: that deletes stored data and models.
+
+Saved accounts and models live in Docker named volumes. The Windows launchers require no VS Code, Python, or separate Ollama installation. For developer changes run `docker compose up --build -d`. The model and timeout are configured in `compose.yaml` (`OLLAMA_MODEL`, `OLLAMA_TIMEOUT`); Docker and Python use the same model setting.
+
+The app is available only from the local computer at `127.0.0.1:8501`. For client handover, do not include private account files or generated newsletters.
+
 ## The Problem
 
 The client is a small non-profit association (education technology / digital pedagogy sector, Finland) that sends a members-only newsletter 2–3 times per month. Two staff members currently:
@@ -30,7 +43,7 @@ Key constraints the client set, which shaped every design decision below:
 - **Site-restricted search** — optionally limit search to one trusted domain (e.g. a specific research repository)
 - **Source reliability filtering** — automatically excludes crowd-edited/low-reliability sources (e.g. Wikipedia, Reddit) and prioritises EU institutions, universities, and research bodies
 - **Duplicate avoidance** — remembers previously used links so repeat searches surface fresh content instead of the same articles
-- **Local AI summarisation** — runs entirely on-device via [Ollama](https://ollama.com) and the `qwen2.5:7b` model, no API costs, no data leaving the machine
+- **Local AI summarisation** — runs entirely on-device via [Ollama](https://ollama.com) and the `qwen3:4b` model, no API costs, no data leaving the machine
 - **Human review step** — every AI-generated summary can be approved, edited, or rejected before the final draft is built
 - **Styled HTML output** — generates a clean, newsletter-style draft (not just plain text) that can be previewed, downloaded, and shared
 
@@ -38,7 +51,7 @@ Key constraints the client set, which shaped every design decision below:
 
 | Layer | Tool |
 |---|---|
-| AI model | [Ollama](https://ollama.com) running `qwen2.5:7b` (fully local, free) |
+| AI model | [Ollama](https://ollama.com) running `qwen3:4b` (fully local, free) |
 | Article extraction | `newspaper3k` |
 | Web search | `ddgs` (DuckDuckGo search, free, no API key) |
 | UI | [Streamlit](https://streamlit.io) |
@@ -61,7 +74,7 @@ Key constraints the client set, which shaped every design decision below:
  └─────┬───────┘
        ▼
  ┌─────────────┐
- │  Local AI   │  (Ollama + qwen2.5:7b — 2-3 sentence summary,
+ │  Local AI   │  (Ollama + qwen3:4b — 4–6 sentence summary,
  │ Summarising │   copyright-safe prompt, own words only)
  └─────┬───────┘
        ▼
@@ -76,14 +89,16 @@ Key constraints the client set, which shaped every design decision below:
 
 ## Setup & Installation
 
-**Prerequisites:** Python 3.10+, [Ollama](https://ollama.com) installed
+**Recommended:** Docker Desktop. No separate Python or Ollama installation is required. See `SETUP_GUIDE.md` for client instructions.
+
+**Optional manual developer setup:** Python 3.12+ and [Ollama](https://ollama.com) installed
 
 ```bash
 # 1. Install Ollama and pull the model
-ollama pull qwen2.5:7b
+ollama pull qwen3:4b
 
 # 2. Install Python dependencies
-pip install requests newspaper3k lxml_html_clean ddgs streamlit
+pip install -r requirements.txt
 
 # 3. Start Ollama (in one terminal)
 ollama serve
@@ -117,7 +132,7 @@ Run the isolated workflow checks with `python -m unittest discover -s tests -v`.
 
 ## Known Limitations
 
-- Local model (`qwen2.5:7b`) occasionally hallucinates on long or non-English source text (~25% failure rate observed in initial testing on a single long Finnish-language article) — mitigated by the mandatory human review step
+- Local model (`qwen3:4b`) occasionally hallucinates on long or non-English source text (accuracy varies by source and model; check all factual details) — mitigated by the mandatory human review step
 - Social media sources (LinkedIn, Facebook) are not supported due to platform scraping restrictions
 - Search relies on DuckDuckGo's free search index, which is less exhaustive than paid search APIs
 - No direct integration with sending platforms (Mailchimp, etc.) yet — output is a downloadable HTML file
@@ -160,7 +175,7 @@ The setup command asks for a password of at least 12 characters and confirmation
 
 Login lasts for the current Streamlit session, up to eight hours. Refreshing may require signing in again. Logging out clears the session's draft, answers, and edits; saved HTML files and shared used-link history remain on disk. Five failed attempts trigger a 30-second delay within that session. Separate accounts currently share saved output and history, but have separate in-memory drafts.
 
-Deployment configuration can later supply `NEWSLETTER_ACCOUNTS_FILE` (absolute path to the account JSON), `OLLAMA_BASE_URL` (default `http://localhost:11434`), and `OLLAMA_MODEL` (default `qwen2.5:7b`) without modifying code. This is local prototype authentication, not a completed public hosting setup: deployment still needs HTTPS, durable storage, cross-session rate limiting or managed identity, and a decision about concurrent shared exports. The alternate Gradio interface and CLI are local development tools and do not use this login gate.
+Deployment configuration can later supply `NEWSLETTER_ACCOUNTS_FILE` (absolute path to the account JSON), `OLLAMA_BASE_URL` (default `http://localhost:11434`), and `OLLAMA_MODEL` (default `qwen3:4b`) without modifying code. This is local prototype authentication, not a completed public hosting setup: deployment still needs HTTPS, durable storage, cross-session rate limiting or managed identity, and a decision about concurrent shared exports. The optional command-line demonstration is a developer tool and does not use this login gate.
 
 
 ### Article publication calendars

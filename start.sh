@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-MODEL="qwen3:4b"
-# MODEL="qwen3:8b"
+MODEL="${OLLAMA_MODEL:-qwen3:4b}"
 OLLAMA_PID=""
 STREAMLIT_PID=""
 DOWNLOAD_PID=""
