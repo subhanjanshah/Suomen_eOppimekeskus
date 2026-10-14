@@ -27,7 +27,8 @@ from ddgs import DDGS
 
 OLLAMA_CHAT_URL = "http://localhost:11434/api/chat"
 OLLAMA_GENERATE_URL = "http://localhost:11434/api/generate"
-MODEL = "qwen3:8b"
+MODEL="qwen3:4b"
+#MODEL = "qwen3:8b"
 
 # Kept for compatibility with earlier code that imports OLLAMA_URL directly.
 OLLAMA_URL = OLLAMA_CHAT_URL
@@ -354,7 +355,7 @@ def analyze_and_summarise(title, text, source_label=""):
                 "think": False,
                 "options": {"temperature": 0},
             },
-            timeout=120,
+            timeout=600,
         )
         response.raise_for_status()
         raw = response.json()["response"]
