@@ -52,11 +52,11 @@ def apply_style(dark=False):
     # Theme-specific overrides also style native Streamlit controls, not only headings.
     palette = (
         {"bg": "#181d1a", "side": "#202822", "surface": "#252e28", "field": "#2b352e",
-         "text": "#e9ede6", "muted": "#adb9ad", "border": "#3e4b40", "accent": "#a8c7aa",
+         "text": "#e9ede6", "muted": "#c6d3c8", "border": "#3e4b40", "accent": "#a8c7aa",
          "accent_text": "#17251a", "hover": "#303d33", "card": "#252e28"}
         if dark else
         {"bg": "#f5f3ed", "side": "#e9eee5", "surface": "#ffffff", "field": "#ffffff",
-         "text": "#203d35", "muted": "#637369", "border": "#d8e0d4", "accent": "#24634f",
+         "text": "#203d35", "muted": "#4c6055", "border": "#d8e0d4", "accent": "#24634f",
          "accent_text": "#ffffff", "hover": "#e1e9dd", "card": "#ffffff"}
     )
     css = """
@@ -69,6 +69,17 @@ def apply_style(dark=False):
     [data-testid="stApp"] p,[data-testid="stApp"] label,
     [data-testid="stApp"] [data-testid="stWidgetLabel"] p,
     [data-testid="stSidebar"] p {color:TEXT;}
+    /* Accessible contrast for review metadata and image-selection guidance. */
+    [data-testid="stApp"] [data-testid="stCaptionContainer"],
+    [data-testid="stApp"] [data-testid="stCaptionContainer"] p,
+    [data-testid="stSidebar"] [data-testid="stCaptionContainer"],
+    [data-testid="stSidebar"] [data-testid="stCaptionContainer"] p,
+    [data-testid="stApp"] [data-testid="stWidgetLabel"] small,
+    [data-testid="stApp"] [data-testid="stMarkdownContainer"] small,
+    [data-testid="stApp"] [data-testid="stAlert"] p {
+        color:MUTED!important;
+        opacity:1!important;
+    }
     [data-testid="stApp"] [data-testid="stCaptionContainer"],
     [data-testid="stSidebar"] [data-testid="stCaptionContainer"],
     .workspace-intro {color:MUTED!important;}
@@ -124,6 +135,63 @@ def apply_style(dark=False):
     .workflow-strip a {padding:12px;border-radius:8px;font-weight:500;}
     .sidebar-app-subtitle {margin-bottom:12px;}
     
+
+    /* Minimal editorial dashboard. */
+    [data-testid="stMainBlockContainer"] {max-width:1080px!important;padding-top:2rem!important;}
+    [data-testid="stApp"] h1 {font-family:Arial,Helvetica,sans-serif!important;font-size:clamp(2rem,3vw,2.6rem)!important;font-weight:750!important;letter-spacing:-.055em!important;}
+    [data-testid="stApp"] h2 {font-size:1.45rem!important;letter-spacing:-.035em!important;}
+    [data-testid="stApp"] h3 {font-size:1.1rem!important;}
+    .brand-kicker {font-size:10px!important;letter-spacing:1.6px!important;}
+    .workspace-intro {font-size:14px!important;line-height:1.5!important;margin-bottom:18px!important;}
+    .workflow-strip {gap:8px!important;margin-bottom:25px!important;}
+    .workflow-strip a {display:flex;align-items:center;gap:10px;padding:13px!important;border-radius:10px!important;font-weight:650!important;}
+    .workflow-strip a:first-child {border-color:ACCENT!important;}
+    .workflow-strip span {display:inline-grid;place-items:center;width:25px;height:25px;border-radius:7px;background:HOVER;color:ACCENT!important;margin:0!important;font-size:10px;}
+    .section-eyebrow {font-size:10px;letter-spacing:1.7px;font-weight:750;color:MUTED;margin:22px 0 6px;}
+    .section-heading {font-size:1.35rem;font-weight:720;letter-spacing:-.035em;color:TEXT;margin-bottom:12px;}
+    [data-testid="stApp"] [data-testid="stTabs"] [role="tablist"] {gap:10px;border-bottom:1px solid BORDER;}
+    [data-testid="stApp"] [data-testid="stTabs"] button[role="tab"] {font-weight:650;padding:11px 18px;}
+    [data-testid="stMain"] [data-testid="stRadio"] [role="radiogroup"] {gap:9px;}
+    [data-testid="stMain"] [data-testid="stRadio"] label {border:1px solid BORDER;border-radius:10px;padding:10px 14px;background:SURFACE;}
+    [data-testid="stMain"] [data-testid="stRadio"] label:has(input:checked) {border-color:ACCENT;background:HOVER;}
+    [data-testid="stMain"] [data-testid="stExpander"] {background:SURFACE;border-radius:10px;}
+    @media(max-width:700px){.workflow-strip{grid-template-columns:repeat(2,minmax(0,1fr))!important;}}
+
+    /* eOppimisKeskus · editorial studio */
+    [data-testid="stMainBlockContainer"] {max-width:1120px!important;padding:1.65rem 2.25rem 4rem!important;}
+    [data-testid="stSidebar"] {min-width:265px!important;max-width:285px!important;}
+    [data-testid="stSidebarUserContent"] {padding:1.35rem 1.05rem!important;}
+    [data-testid="stApp"] h1 {font-family:Arial,Helvetica,sans-serif!important;font-size:clamp(1.9rem,2.6vw,2.5rem)!important;font-weight:740!important;letter-spacing:-.055em!important;line-height:1.15!important;margin:0 0 8px!important;}
+    [data-testid="stApp"] h2 {font-size:1.28rem!important;font-weight:700!important;}
+    .brand-kicker {font-size:10px!important;letter-spacing:1.5px!important;margin:4px 0 12px!important;color:MUTED!important;}
+    .workspace-intro {font-size:14px!important;line-height:1.5!important;margin:0 0 22px!important;}
+    .sidebar-brand {display:flex;align-items:center;gap:12px;padding:8px 3px 23px;margin-bottom:17px;border-bottom:1px solid BORDER;}
+    .sidebar-brand-mark {display:grid;grid-template-columns:repeat(2,9px);grid-template-rows:repeat(2,9px);gap:3px;width:38px;height:38px;align-content:center;justify-content:center;background:#204e42;border-radius:10px;flex-shrink:0;transform:rotate(-4deg);}
+    .sidebar-brand-mark span {display:block;border-radius:2px;background:#f5f3ed;}
+    .sidebar-brand-mark span:nth-child(2) {opacity:.45;}
+    .sidebar-brand-mark span:nth-child(3) {opacity:.65;}
+    .sidebar-brand-copy {min-width:0;}
+    .sidebar-brand-name {font-size:19px;font-weight:760;letter-spacing:-.9px;line-height:1.05;color:TEXT;white-space:nowrap;}
+    .sidebar-brand-name span {display:block;}
+    .sidebar-brand-tagline {font-size:9px;font-weight:720;letter-spacing:1.6px;color:MUTED;margin-top:8px;}
+    .sidebar-nav-caption {font-size:10px;letter-spacing:1.6px;font-weight:720;color:MUTED;margin:0 0 9px 10px;}
+    [data-testid="stSidebar"] [data-testid="stRadio"] label {padding:10px 12px!important;border-radius:9px!important;}
+    [data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) {background:HOVER!important;box-shadow:none!important;}
+    [data-testid="stSidebar"] [data-testid="stRadio"] label p {font-size:13px!important;font-weight:650!important;}
+    [data-testid="stSidebar"] [data-testid="stExpander"] {border:1px solid BORDER!important;border-radius:10px!important;margin-top:18px!important;}
+    [data-testid="stSidebar"] [data-testid="stExpander"] summary {font-size:12px!important;}
+    .workflow-strip {display:flex!important;gap:0!important;align-items:center!important;margin:2px 0 24px!important;padding:0!important;border-bottom:1px solid BORDER;}
+    .workflow-strip a {flex:1;display:flex!important;justify-content:flex-start;align-items:center;gap:8px;padding:10px 8px 14px!important;background:transparent!important;border:0!important;border-radius:0!important;color:MUTED!important;font-size:12px!important;font-weight:650!important;white-space:nowrap;}
+    .workflow-strip a:first-child {color:TEXT!important;border-bottom:2px solid ACCENT!important;}
+    .workflow-strip span {width:23px;height:23px;display:inline-grid;place-items:center;border-radius:7px;background:HOVER!important;color:TEXT!important;font-size:10px!important;margin:0!important;}
+    .section-eyebrow {margin-top:16px!important;font-size:9px!important;letter-spacing:1.65px!important;}
+    .section-heading {font-size:1.22rem!important;margin-bottom:8px!important;}
+    [data-testid="stMain"] [data-testid="stTextInput"] input {min-height:42px!important;}
+    [data-testid="stMain"] [data-testid="stExpander"] {border:1px solid BORDER!important;border-radius:10px!important;}
+    [data-testid="stMain"] [data-testid="stRadio"] label {padding:9px 12px!important;border-radius:9px!important;font-size:12px!important;}
+    [data-testid="stMain"] [data-testid="stTabs"] [role="tablist"] {margin-top:2px!important;}
+    [data-testid="stMain"] [data-testid="stTabs"] button[role="tab"] {font-size:13px!important;}
+    @media(max-width:760px){[data-testid="stMainBlockContainer"]{padding:1.2rem 1rem 3rem!important;}.workflow-strip a{font-size:11px!important;gap:4px!important;}.workflow-strip span{width:20px;height:20px;}}
     </style>
     """
     for key, value in palette.items():
@@ -140,8 +208,8 @@ def login_brand():
 
 
 def workspace_header():
-    st.markdown('<div class="brand-kicker">Suomen eOppimiskeskus ry / Editorial workspace</div>', unsafe_allow_html=True)
-    st.title('Your next newsletter starts here.')
-    st.markdown('''<p class="workspace-intro">Find something worth sharing. Review the stories, make them your own, and bring your next issue together.</p>
+    st.markdown('<div class="brand-kicker">EOPPIMISKESKUS  /  NEWSLETTER WORKSPACE</div>', unsafe_allow_html=True)
+    st.title('Create a new issue.')
+    st.markdown('''<p class="workspace-intro">Your next newsletter starts here. Collect, curate, and publish with clarity.</p>
 <nav class="workflow-strip" aria-label="Newsletter workflow"><a href="#collect"><span>01</span>Collect</a><a href="#review"><span>02</span>Review</a><a href="#design"><span>03</span>Design</a><a href="#export"><span>04</span>Export</a></nav>
 <div id="collect"></div>''', unsafe_allow_html=True)

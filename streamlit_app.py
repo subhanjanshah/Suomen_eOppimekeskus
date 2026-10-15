@@ -45,11 +45,10 @@ from newsletter_generator import (
 
 def render_sidebar():
     with st.sidebar:
-        st.markdown('<div class="memory-heading">RECENTLY USED LINKS</div>', unsafe_allow_html=True)
         used = load_used_links()
-        st.caption(f"{len(used)} saved links · Previously used articles are skipped during topic searches.")
-        if used:
-            with st.expander(f"Past links ({len(used)})", expanded=False):
+        with st.expander(f"↗  Link history  ·  {len(used)}", expanded=False):
+            st.caption("Previously used articles are skipped during topic searches.")
+            if used:
                 st.markdown('<div class="past-links-heading">Previously included sources</div>', unsafe_allow_html=True)
                 for url in sorted(used):
                     # Only make safe web URLs clickable; escape every user-supplied value.
@@ -65,11 +64,11 @@ def render_sidebar():
                         )
                     else:
                         st.code(url)
-        if st.button("Clear link history", key="clear_link_history", use_container_width=True,
-                     help="Allow previously used articles to appear in future searches."):
-            clear_used_links()
-            st.success("History cleared.")
-            st.rerun()
+            if st.button("Clear link history", key="clear_link_history", use_container_width=True,
+                         help="Allow previously used articles to appear in future searches."):
+                clear_used_links()
+                st.success("History cleared.")
+                st.rerun()
 
 
 def parse_links(raw_text):
@@ -81,11 +80,13 @@ def parse_links(raw_text):
 def source_input(label, key_prefix, date_options=None):
     """Render collection controls and return a builder with shared date settings."""
     date_options = date_options or {}
+    st.caption("Choose how to collect content for this section.")
     mode = st.radio(
         f"{label} - source",
         ["Paste links", "Search by topic", "RSS feeds"],
         key=f"{key_prefix}_mode",
         horizontal=True,
+        label_visibility="collapsed",
     )
 
     if mode == "Paste links":
@@ -186,8 +187,14 @@ apply_style(dark=st.session_state.dark_mode)
 require_login()
 
 with st.sidebar:
-    st.markdown('<div class="sidebar-app-title">eOppimisRadar</div>'
-                '<div class="sidebar-app-subtitle">Editorial workspace</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="sidebar-brand">'
+        '<div class="sidebar-brand-mark" aria-hidden="true"><span></span><span></span><span></span><span></span></div>'
+        '<div class="sidebar-brand-copy"><div class="sidebar-brand-name">eOppimis<span>Keskus</span></div>'
+        '<div class="sidebar-brand-tagline">EDITORIAL STUDIO</div></div>'
+        '</div><div class="sidebar-nav-caption">WORKSPACE</div>',
+        unsafe_allow_html=True,
+    )
     if is_admin(st.session_state.get("auth_user"), load_accounts()):
         page = st.radio("Workspace", ["Newsletter Generator", "Manage Accounts"],
                         key="main_page", label_visibility="collapsed")
@@ -215,13 +222,15 @@ workspace_header()
 if "generated_sections" not in st.session_state:
     st.session_state.generated_sections = None
 
+st.markdown('<div class="section-eyebrow">ISSUE SETUP</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-heading">Newsletter details</div>', unsafe_allow_html=True)
 newsletter_title = st.text_input(
     "Newsletter title",
     value="Newsletter",
 )
 
-st.subheader("Article publication dates")
-filter_dates = st.checkbox("Filter by publication date", key="filter_dates")
+with st.expander("Publication date filter · Optional", expanded=False):
+    filter_dates = st.checkbox("Filter by publication date", key="filter_dates")
 date_options = {}
 date_valid = True
 if filter_dates:
@@ -241,15 +250,15 @@ if filter_dates:
     st.caption("Both dates are included. This checks article publication dates, not event dates. "
                "Filtering happens before AI analysis; search results and feeds may not contain every article in the range.")
 
+st.markdown('<div class="section-eyebrow">CONTENT COLLECTION</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-heading">Find your stories</div>', unsafe_allow_html=True)
+st.caption("Choose a source for each section. Generate Draft collects both sections into one newsletter.")
 highlights_tab, events_tab = st.tabs(["News & Insights", "Events"])
-st.caption("Set up each section in its tab. Generate Draft collects both sections into one newsletter.")
 
 with highlights_tab:
-    st.subheader("News & Insights")
     highlights_builder = source_input("News & Insights", "highlights", date_options)
 
 with events_tab:
-    st.subheader("Events")
     events_builder = source_input("Events", "events", date_options)
 
 if st.button("Generate Draft", type="primary", disabled=not date_valid):
