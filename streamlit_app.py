@@ -27,7 +27,7 @@ from newsletter_design import safe_url
 from copy import deepcopy
 
 import streamlit as st
-from local_auth import require_login, is_admin, render_account_management, load_accounts
+from local_auth import require_login, is_admin, render_account_management, load_accounts, render_account_chip
 from app_style import apply_style, workspace_header
 
 from newsletter_generator import (
@@ -207,9 +207,13 @@ with st.sidebar:
 render_sidebar()
 with st.sidebar:
     st.container(key="sidebar_bottom_spacer")
+    # The spacer above pushes everything below it down to the bottom of
+    # the sidebar. Appearance toggle comes first here so the account
+    # chip (avatar, name, role, Log out) ends up as the very last thing.
     with st.container(key="theme_toggle_panel"):
         st.toggle("🌙 Dark mode" if not st.session_state.dark_mode else "☀️ Light mode",
                   key="dark_mode", help="Switch the appearance of this workspace")
+    render_account_chip()
 
 if page == "Manage Accounts":
     render_account_management()

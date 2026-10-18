@@ -4,6 +4,7 @@ import argparse
 import getpass
 import hashlib
 import hmac
+import html
 import json
 import os
 from pathlib import Path
@@ -151,6 +152,32 @@ def clear_session():
         del st.session_state[key]
 
 
+def render_account_chip():
+    """Draw the signed-in account chip (avatar, name, role, log out).
+
+    Call this explicitly at the point in the sidebar where it should
+    appear - it is not drawn automatically by require_login() so the
+    caller controls its position in the layout.
+    """
+    user = st.session_state.get('auth_user')
+    if not user:
+        return
+    accounts = load_accounts()
+    role_label = 'Administrator' if is_admin(user, accounts) else 'User'
+    initial = html.escape((user or '?').strip()[:1].upper() or '?')
+    with st.container(key='sidebar_account'):
+        st.markdown(
+            '<div class="account-row">'
+            f'<div class="account-avatar">{initial}</div>'
+            '<div class="account-copy">'
+            f'<div class="account-name">{html.escape(user)}</div>'
+            f'<div class="account-role">{html.escape(role_label)}</div>'
+            '</div></div>',
+            unsafe_allow_html=True,
+        )
+        st.button('Log out', on_click=clear_session, key='sidebar_logout', use_container_width=True)
+
+
 def require_login():
     try:
         accounts = load_accounts()
@@ -164,13 +191,6 @@ def require_login():
                 and current_hash and hmac.compare_digest(
                     hashlib.sha256(current_hash.encode()).hexdigest(),
                     st.session_state.get('auth_version', ''))):
-            with st.sidebar:
-                st.caption(f'Signed in as {user}')
-                st.button('Log out', on_click=clear_session)
-                if is_admin(user, accounts):
-                    st.caption('Role: Administrator')
-                else:
-                    st.caption('Role: User')
             return
         clear_session()
 
