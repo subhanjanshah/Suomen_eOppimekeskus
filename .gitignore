@@ -9,3 +9,6 @@ __pycache__/
 .env
 .streamlit/secrets.toml
 used_links.json
+
+/newsletter_draft.md
+/newsletter_draft.html
