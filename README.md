@@ -1,6 +1,6 @@
 # AI-Assisted Newsletter Draft Generator
 
-A local, free, privacy-respecting tool that helps a small team turn scattered web content into a reviewable newsletter draft — built as part of a university Service Design / Design Thinking project.
+A local, free, privacy-respecting tool that helps a small team turn scattered web content into a reviewable newsletter draft.
 
 ## Recommended Windows setup (Docker Desktop)
 
