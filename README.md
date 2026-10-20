@@ -2,18 +2,20 @@
 
 A local, free, privacy-respecting tool that helps a small team turn scattered web content into a reviewable newsletter draft — built as part of a university Service Design / Design Thinking project.
 
-## Recommended Docker setup (Windows client)
+## Recommended Windows setup (Docker Desktop)
 
-1. Install and start **Docker Desktop**. Docker must be running.
-2. Extract this project ZIP into a folder. Do not run the scripts from inside the ZIP.
-3. Double-click `Start-eOppimisRadar.bat` and open `http://localhost:8501`.
-4. On the first launch, Docker builds the application and downloads **Qwen3:4b** (about 2.5 GB). This requires internet access and may take several minutes. Refresh the page if it opens before Streamlit is ready.
-5. Create the first administrator account, then use the newsletter generator.
-6. Double-click `Stop-eOppimisRadar.bat` to stop the app. **Do not run `docker compose down -v`**: that deletes stored data and models.
+1. Install **Docker Desktop** once. Start it at least once after installation to complete its setup and accept any prompts.
+2. Download the project ZIP from GitHub and **extract it** to a normal folder. Keep the project files together; do not run launchers from inside the ZIP.
+3. Double-click **`Start-eOppimisKeskus.bat`**. The launcher checks Docker, opens Docker Desktop if needed, waits for its engine, builds and starts the application, then opens **http://localhost:8501** in your browser.
+4. On first launch, Docker downloads/builds the application and the local **Qwen3:4b** model (approximately 2.5 GB for the model). Internet access and several minutes may be required. The app may become available before the model has finished downloading; allow extra time for the first AI request.
+5. In the app, **create the first administrator account** on the initial setup screen and sign in. The administrator can add colleagues from **Manage Accounts**.
+6. When finished, double-click **`Stop-eOppimisKeskus.bat`**. It stops the project containers and closes its Command Prompt window automatically on success. Docker Desktop itself remains open.
 
-Saved accounts and models live in Docker named volumes. The Windows launchers require no VS Code, Python, or separate Ollama installation. For developer changes run `docker compose up --build -d`. The model and timeout are configured in `compose.yaml` (`OLLAMA_MODEL`, `OLLAMA_TIMEOUT`); Docker and Python use the same model setting.
+**Requirements:** Windows with Docker Desktop installed and a working Docker engine, enough free disk space for the container image and AI model, and an internet connection for initial setup and web searches. The Windows launchers do **not** require Python, VS Code, a separate Ollama installation, or Git to run the downloaded project. Docker Desktop must be installed, but you do not have to open it manually each time.
 
-The app is available only from the local computer at `127.0.0.1:8501`. For client handover, do not include private account files or generated newsletters.
+**Data safety:** Accounts and model files are stored in Docker named volumes and survive normal starts/stops, including `docker compose down`. **Do not run `docker compose down -v`** unless you intend to delete those volumes. Do not distribute private accounts, generated newsletters, or other sensitive data with the project.
+
+The application listens on the local computer at **http://localhost:8501** (bound to `127.0.0.1`). See [`SETUP_GUIDE.md`](SETUP_GUIDE.md) for step-by-step troubleshooting. Developers can run `docker compose up -d --build` and `docker compose down` from the project folder.
 
 ## The Problem
 
@@ -164,19 +166,13 @@ This is a browser-oriented HTML draft. Compatibility with email sending platform
 
 ### Local login
 
-Create an account from the project folder before opening the workspace:
+For the recommended Docker setup, **no terminal or Python commands are needed to create accounts**. On the first visit to `http://localhost:8501`, use the initial setup form to create the first account. The first account becomes the **administrator**. After signing in, the administrator can open **Manage Accounts** to add colleagues.
 
-```bash
-.venv/bin/python local_auth.py add-user YOUR_USERNAME
-.venv/bin/streamlit run streamlit_app.py --server.address 127.0.0.1
-```
-
-The setup command asks for a password of at least 12 characters and confirmation without displaying either. Repeat with another username to add another editor. Accounts are stored as salted PBKDF2 password hashes in `.local/accounts.json`, excluded from Git. No default password or public registration is provided. With no account configuration, the app shows setup instructions and keeps the workspace locked.
+For optional manual development outside Docker, accounts can also be created using `python local_auth.py add-user YOUR_USERNAME` in the configured Python environment. The password must be at least 12 characters. The Docker app stores its accounts in a persistent Docker volume (`/data/accounts.json`); the default manual setup uses `.local/accounts.json`, excluded from Git. There is no default password or public self-registration after initial setup.
 
 Login lasts for the current Streamlit session, up to eight hours. Refreshing may require signing in again. Logging out clears the session's draft, answers, and edits; saved HTML files and shared used-link history remain on disk. Five failed attempts trigger a 30-second delay within that session. Separate accounts currently share saved output and history, but have separate in-memory drafts.
 
-Deployment configuration can later supply `NEWSLETTER_ACCOUNTS_FILE` (absolute path to the account JSON), `OLLAMA_BASE_URL` (default `http://localhost:11434`), and `OLLAMA_MODEL` (default `qwen3:4b`) without modifying code. This is local prototype authentication, not a completed public hosting setup: deployment still needs HTTPS, durable storage, cross-session rate limiting or managed identity, and a decision about concurrent shared exports. The optional command-line demonstration is a developer tool and does not use this login gate.
-
+Deployment configuration can supply `NEWSLETTER_ACCOUNTS_FILE` (absolute path to the account JSON), `OLLAMA_BASE_URL` (default `http://localhost:11434`), and `OLLAMA_MODEL` (default `qwen3:4b`) without modifying code. This is local prototype authentication, not a completed public hosting setup: deployment still needs HTTPS, durable storage, cross-session rate limiting or managed identity, and a decision about concurrent shared exports. The optional command-line demonstration is a developer tool and does not use this login gate.
 
 ### Article publication calendars
 
