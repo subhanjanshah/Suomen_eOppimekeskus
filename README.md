@@ -103,7 +103,7 @@ ollama pull qwen3:4b
 pip install -r requirements.txt
 
 # 3. Start Ollama (in one terminal)
-ollama serve
+ollama server
 
 # 4. Run the app (in another terminal)
 streamlit run streamlit_app.py
